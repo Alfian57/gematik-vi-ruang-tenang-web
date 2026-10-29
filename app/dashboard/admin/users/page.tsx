@@ -1,0 +1,407 @@
+"use client";
+
+import Image from "next/image";
+import { useState } from "react";
+import { Search, Shield, Users, Ban, CheckCircle, BookX, BookOpen, MessageSquareOff, MessageSquare, Building2, Gavel, UserCheck, TimerReset } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getUploadUrl } from "@/services/http/upload-url";
+import { formatDate } from "@/utils";
+import { AdminMascotHero } from "@/components/shared/dashboard/AdminMascotHero";
+import { useAdminUsers } from "./_hooks/useAdminUsers";
+
+export default function AdminUsersPage() {
+  const [featureBlockAction, setFeatureBlockAction] = useState<{
+    userId: number;
+    userName: string;
+    feature: "journal" | "forum";
+    currentlyBlocked: boolean;
+  } | null>(null);
+
+  const {
+    user,
+    users,
+    totalPages,
+    isLoading,
+    blockId,
+    blockAction,
+    search,
+    role,
+    page,
+    setSearch,
+    setRole,
+    setPage,
+    setBlockId,
+    openBlockDialog,
+    handleBlockAction,
+    handleJournalBlockToggle,
+    handleForumBlockToggle,
+    handleRoleChange,
+    handleBanUser,
+    handleUnsuspendUser,
+  } = useAdminUsers();
+
+  if (user?.role !== "admin") {
+    return (
+      <div className="py-8 text-center">
+        <h1 className="text-2xl font-bold text-destructive">Akses Ditolak</h1>
+        <p className="text-muted-foreground">Anda tidak memiliki akses ke halaman ini.</p>
+      </div>
+    );
+  }
+
+  const getRoleBadge = (role: string) => {
+    if (role === "admin") {
+      return <span className="px-2 py-1 text-xs rounded-full bg-primary/10 text-primary">Admin</span>;
+    }
+    if (role === "mitra") {
+      return <span className="px-2 py-1 text-xs rounded-full bg-primary/10 text-primary">Mitra</span>;
+    }
+    return <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-700">User</span>;
+  };
+
+  const getStatusBadge = (u: { is_blocked: boolean; is_banned?: boolean; is_suspended?: boolean }) => {
+    if (u.is_banned) {
+      return <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">Dibanned</span>;
+    }
+    if (u.is_suspended) {
+      return <span className="px-2 py-1 text-xs rounded-full bg-amber-100 text-amber-700">Disuspend</span>;
+    }
+    if (u.is_blocked) {
+      return <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-700">Diblokir</span>;
+    }
+    return <span className="px-2 py-1 text-xs rounded-full bg-primary/10 text-primary">Aktif</span>;
+  };
+
+  const getInitial = (name: string) => {
+    return (name || "U").trim().charAt(0).toUpperCase() || "U";
+  };
+
+  const getAvatarSrc = (avatar?: string) => {
+    const value = avatar?.trim();
+    if (!value) return null;
+    return value.startsWith("http") ? value : getUploadUrl(value);
+  };
+
+  const openFeatureBlockDialog = (userId: number, userName: string, feature: "journal" | "forum", currentlyBlocked: boolean) => {
+    setFeatureBlockAction({ userId, userName, feature, currentlyBlocked });
+  };
+
+  const handleConfirmFeatureBlock = async () => {
+    if (!featureBlockAction) return;
+
+    const { userId, feature, currentlyBlocked } = featureBlockAction;
+    if (feature === "journal") {
+      await handleJournalBlockToggle(userId, currentlyBlocked);
+    } else {
+      await handleForumBlockToggle(userId, currentlyBlocked);
+    }
+
+    setFeatureBlockAction(null);
+  };
+
+  return (
+    <div className="py-2 lg:py-4">
+      <AdminMascotHero
+        eyebrow="Manajemen Pengguna"
+        title="Kelola Pengguna"
+        description="Pantau status akun pengguna, hak akses, peranan peran, dan riwayat keamanan komunitas."
+        image="/images/landing/mascot/secure.webp"
+        imageAlt="Maskot RuNa menjaga keamanan pengguna"
+      />
+
+      {/* Search & Filter */}
+      <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white/95 p-3.5 shadow-sm md:flex-row md:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
+          <Input
+            placeholder="Cari nama atau email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 bg-white"
+          />
+        </div>
+        <Select value={role || "all"} onValueChange={(value) => setRole(value === "all" ? "" : value)}>
+          <SelectTrigger className="w-full md:w-48 bg-white">
+            <SelectValue placeholder="Filter role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua role</SelectItem>
+            <SelectItem value="user">User</SelectItem>
+            <SelectItem value="mitra">Mitra</SelectItem>
+            <SelectItem value="admin">Admin</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Users Table */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto table-scroll-indicator">
+          <table className="w-full min-w-160">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="text-left p-4 font-medium text-gray-600">Pengguna</th>
+                <th className="text-left p-4 font-medium text-gray-600 hidden md:table-cell">Email</th>
+                <th className="text-left p-4 font-medium text-gray-600">Role</th>
+                <th className="text-left p-4 font-medium text-gray-600">Status</th>
+                <th className="text-left p-4 font-medium text-gray-600 hidden lg:table-cell">Terdaftar</th>
+                <th className="text-right p-4 font-medium text-gray-600 whitespace-nowrap w-44">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gray-200 rounded-full" />
+                        <div className="h-4 bg-gray-200 rounded w-32" />
+                      </div>
+                    </td>
+                    <td className="p-4 hidden md:table-cell"><div className="h-4 bg-gray-200 rounded w-40" /></td>
+                    <td className="p-4"><div className="h-6 bg-gray-200 rounded w-16" /></td>
+                    <td className="p-4"><div className="h-6 bg-gray-200 rounded w-16" /></td>
+                    <td className="p-4 hidden lg:table-cell"><div className="h-4 bg-gray-200 rounded w-24" /></td>
+                    <td className="p-4"><div className="h-8 bg-gray-200 rounded w-24 ml-auto" /></td>
+                  </tr>
+                ))
+              ) : users.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-16 text-center">
+                    <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-500">
+                      {search ? "Tidak ada pengguna yang cocok" : "Belum ada pengguna"}
+                    </h3>
+                    <p className="text-gray-400 text-sm mt-1">
+                      {search ? "Coba kata kunci lain" : "Pengguna akan muncul di sini"}
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                users.map((u) => (
+                  <tr key={u.id} className={`hover:bg-gray-50 ${(u.is_blocked || u.is_banned || u.is_suspended) ? 'bg-red-50/50' : ''}`}>
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden relative border border-gray-200">
+                          {getAvatarSrc(u.avatar) ? (
+                            <Image
+                              src={getAvatarSrc(u.avatar) as string}
+                              alt={u.name || "User"}
+                              fill
+                              sizes="40px"
+                              className="object-cover"
+                            />
+                          ) : (
+                            <span className="text-primary font-bold">{getInitial(u.name)}</span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium truncate flex items-center gap-1.5">
+                            {u.name}
+                            {u.role === "admin" && <Shield className="w-3.5 h-3.5 text-primary/80 shrink-0" />}
+                            {u.role === "mitra" && <Building2 className="w-3.5 h-3.5 text-primary/80 shrink-0" />}
+                          </p>
+                          <p className="text-xs text-gray-500 md:hidden truncate">{u.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4 hidden md:table-cell">
+                      <span className="text-sm text-gray-600">{u.email}</span>
+                    </td>
+                    <td className="p-4">
+                      {getRoleBadge(u.role)}
+                    </td>
+                    <td className="p-4">
+                      {getStatusBadge(u)}
+                    </td>
+                    <td className="p-4 hidden lg:table-cell">
+                      <span className="text-sm text-gray-500">{formatDate(u.created_at)}</span>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex gap-1 justify-end items-center">
+                        {u.role === "admin" ? (
+                          <span className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                            Admin tidak bisa diedit
+                          </span>
+                        ) : (
+                          <>
+                            {u.is_blocked ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openBlockDialog(u.id, "unblock")}
+                                className="text-primary/80 hover:text-primary hover:bg-primary/10"
+                                title="Buka Blokir"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openBlockDialog(u.id, "block")}
+                                className="text-primary/80 hover:text-primary/80 hover:bg-primary/10"
+                                title="Blokir"
+                              >
+                                <Ban className="w-4 h-4" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openFeatureBlockDialog(u.id, u.name, "journal", Boolean(u.journal_blocked))}
+                              className={u.journal_blocked
+                                ? "text-primary/80 hover:text-primary hover:bg-primary/10"
+                                : "text-primary/80 hover:text-primary/80 hover:bg-primary/10"}
+                              title={u.journal_blocked ? "Buka Blokir Jurnal" : "Blokir Jurnal"}
+                            >
+                              {u.journal_blocked ? (
+                                <BookOpen className="w-4 h-4" />
+                              ) : (
+                                <BookX className="w-4 h-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openFeatureBlockDialog(u.id, u.name, "forum", Boolean(u.is_forum_blocked))}
+                              className={u.is_forum_blocked
+                                ? "text-primary/80 hover:text-primary hover:bg-primary/10"
+                                : "text-primary/80 hover:text-primary/80 hover:bg-primary/10"}
+                              title={u.is_forum_blocked ? "Buka Blokir Forum" : "Blokir Forum"}
+                            >
+                              {u.is_forum_blocked ? (
+                                <MessageSquare className="w-4 h-4" />
+                              ) : (
+                                <MessageSquareOff className="w-4 h-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRoleChange(u.id, u.role === "mitra" ? "user" : "mitra")}
+                              className={u.role === "mitra"
+                                ? "text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+                                : "text-primary/80 hover:text-primary hover:bg-primary/10"}
+                              title={u.role === "mitra" ? "Cabut role mitra" : "Promosikan menjadi mitra"}
+                            >
+                              {u.role === "mitra" ? (
+                                <Users className="w-4 h-4" />
+                              ) : (
+                                <Building2 className="w-4 h-4" />
+                              )}
+                            </Button>
+                            {/* Ban / Unban (permanent moderation ban) */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleBanUser(u.id, Boolean(u.is_banned))}
+                              className={u.is_banned
+                                ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                : "text-red-600 hover:text-red-700 hover:bg-red-50"}
+                              title={u.is_banned ? "Cabut Ban" : "Ban Permanen"}
+                            >
+                              {u.is_banned ? (
+                                <UserCheck className="w-4 h-4" />
+                              ) : (
+                                <Gavel className="w-4 h-4" />
+                              )}
+                            </Button>
+                            {/* Lift suspension (only when suspended) */}
+                            {u.is_suspended && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleUnsuspendUser(u.id)}
+                                className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                                title="Cabut Suspensi"
+                              >
+                                <TimerReset className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center p-4 border-t bg-gray-50/50">
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              disabled={isLoading}
+            />
+          </div>
+        )}
+      </div>
+
+
+      {/* Block/Unblock Confirmation Modal */}
+      <Dialog open={blockId !== null} onOpenChange={() => setBlockId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {blockAction === "unblock" ? "Buka Blokir Pengguna?" : "Blokir Pengguna?"}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-gray-600 py-4">
+            {blockAction === "unblock"
+              ? "Pengguna akan dapat mengakses akun mereka kembali."
+              : "Pengguna tidak akan dapat login dan mengakses fitur apapun."}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBlockId(null)}>Batal</Button>
+            <Button
+              className={blockAction === "unblock"
+                ? "bg-primary hover:bg-primary text-white"
+                : "bg-primary hover:bg-primary text-white"}
+              onClick={handleBlockAction}
+            >
+              {blockAction === "unblock" ? "Buka Blokir" : "Blokir"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Journal/Forum Block Confirmation Modal */}
+      <Dialog open={featureBlockAction !== null} onOpenChange={() => setFeatureBlockAction(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {featureBlockAction?.currentlyBlocked ? "Buka Blokir Fitur?" : "Blokir Fitur?"}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-gray-600 py-4">
+            {featureBlockAction?.currentlyBlocked
+              ? `Pengguna ${featureBlockAction?.userName} akan bisa mengakses kembali fitur ${featureBlockAction?.feature === "journal" ? "jurnal" : "forum"}.`
+              : `Pengguna ${featureBlockAction?.userName} tidak akan bisa mengakses fitur ${featureBlockAction?.feature === "journal" ? "jurnal" : "forum"}.`}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFeatureBlockAction(null)}>Batal</Button>
+            <Button
+              className={featureBlockAction?.currentlyBlocked
+                ? "bg-primary hover:bg-primary text-white"
+                : "bg-primary hover:bg-primary text-white"}
+              onClick={handleConfirmFeatureBlock}
+            >
+              {featureBlockAction?.currentlyBlocked
+                ? `Buka Blokir ${featureBlockAction?.feature === "journal" ? "Jurnal" : "Forum"}`
+                : `Blokir ${featureBlockAction?.feature === "journal" ? "Jurnal" : "Forum"}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

@@ -1,0 +1,186 @@
+"use client";
+
+import { format } from "date-fns";
+import { parseApiDate } from "@/utils/date";
+import { id } from "date-fns/locale";
+import { Journal } from "@/types";
+import {
+    Lock,
+    Eye,
+    EyeOff,
+    Edit,
+    Trash2,
+    ArrowLeft,
+    Tag,
+    Clock,
+    FileText,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/utils";
+import { sanitizeHtml } from "@/utils/sanitize";
+import { MoodAssetIcon } from "@/components/shared/mood";
+
+interface JournalDetailProps {
+    journal: Journal;
+    onBack: () => void;
+    onEdit: () => void;
+    onDelete: () => void;
+    onToggleAIShare: () => void;
+}
+
+export function JournalDetail({
+    journal,
+    onBack,
+    onEdit,
+    onDelete,
+    onToggleAIShare,
+}: JournalDetailProps) {
+    return (
+        <div className="flex flex-col h-full bg-white rounded-xl border border-gray-200 overflow-hidden">
+            {/* Header */}
+            <div className="p-3 sm:p-4 border-b border-gray-200">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <Button variant="ghost" size="sm" onClick={onBack} className="self-start">
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        Kembali
+                    </Button>
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onToggleAIShare}
+                            className="min-h-9"
+                            aria-label={journal.share_with_ai ? "Sembunyikan dari AI" : "Bagikan ke AI"}
+                        >
+                            {journal.share_with_ai ? (
+                                <>
+                                    <EyeOff className="w-4 h-4 mr-2" />
+                                    <span className="hidden sm:inline">Sembunyikan dari AI</span>
+                                    <span className="sm:hidden">Sembunyikan AI</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Eye className="w-4 h-4 mr-2" />
+                                    <span className="hidden sm:inline">Bagikan ke AI</span>
+                                    <span className="sm:hidden">Bagikan AI</span>
+                                </>
+                            )}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={onEdit} className="min-h-9" aria-label="Edit jurnal">
+                            <Edit className="w-4 h-4 mr-2" />
+                            <span>Edit</span>
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onDelete}
+                            className="text-red-600 hover:text-red-700 min-h-9"
+                            aria-label="Hapus jurnal"
+                        >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            <span>Hapus</span>
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto p-6">
+                {/* Title & Mood */}
+                <div className="flex items-start gap-3 mb-4">
+                    {journal.mood_label && (
+                        <MoodAssetIcon moodLabel={journal.mood_label} moodId={journal.mood_id} size={40} className="h-10 w-10 object-contain" />
+                    )}
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900">
+                            {journal.title}
+                        </h1>
+                        {journal.mood_label && (
+                            <p className="text-sm text-gray-500 mt-1">
+                                Mood: {journal.mood_label}
+                            </p>
+                        )}
+                    </div>
+                </div>
+
+                {/* Meta Info */}
+                <div className="flex items-center gap-4 mb-6 text-sm text-gray-500 flex-wrap">
+                    <div className="flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        <span>
+                            {format(parseApiDate(journal.created_at), "EEEE, d MMMM yyyy 'pukul' HH:mm", {
+                                locale: id,
+                            })}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <FileText className="w-4 h-4" />
+                        <span>{journal.word_count} kata</span>
+                    </div>
+                    {journal.is_private && (
+                        <div className="flex items-center gap-1 text-primary/80">
+                            <Lock className="w-4 h-4" />
+                            <span>Privat</span>
+                        </div>
+                    )}
+                    <div
+                        className={cn(
+                            "flex items-center gap-1",
+                            journal.share_with_ai
+                                ? "text-primary/80"
+                                : "text-gray-500"
+                        )}
+                    >
+                        {journal.share_with_ai ? (
+                            <>
+                                <Eye className="w-4 h-4" />
+                                <span>AI dapat membaca</span>
+                            </>
+                        ) : (
+                            <>
+                                <EyeOff className="w-4 h-4" />
+                                <span>AI tidak dapat membaca</span>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {/* Tags */}
+                {journal.tags && journal.tags.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap mb-6">
+                        <Tag className="w-4 h-4 text-gray-400" />
+                        {journal.tags.map((tag) => (
+                            <span
+                                key={tag}
+                                className="px-2 py-1 bg-gray-100 rounded-full text-sm text-gray-600"
+                            >
+                                #{tag}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                {/* AI Access Info */}
+                {journal.ai_accessed_at && (
+                    <div className="mb-6 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                        <div className="flex items-center gap-2 text-sm text-primary">
+                            <Eye className="w-4 h-4" />
+                            <span>
+                                AI terakhir membaca jurnal ini:{" "}
+                                {format(parseApiDate(journal.ai_accessed_at), "d MMMM yyyy 'pukul' HH:mm", {
+                                    locale: id,
+                                })}
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                {/* Journal Content */}
+                <div
+                    className="prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(journal.content) }}
+                />
+            </div>
+        </div>
+    );
+}

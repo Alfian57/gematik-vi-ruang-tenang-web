@@ -1,0 +1,236 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { storyService } from "@/services/api";
+import { Navbar, Footer } from "@/components/layout";
+import { PublicPageHero } from "../../_components/PublicPageHero";
+import { useAuthStore } from "@/store/authStore";
+import { StoryForm } from "@/components/shared/stories";
+import { StoryCategory, StoryStats, CreateStoryRequest } from "@/types";
+import { ArrowLeft, AlertTriangle, BarChart3, Lock } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+import { ROUTES } from "@/lib/routes";
+
+export default function CreateStoryPage() {
+    const router = useRouter();
+    const { token, user } = useAuthStore();
+
+    const [categories, setCategories] = useState<StoryCategory[]>([]);
+    const [myStats, setMyStats] = useState<StoryStats | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Redirect if not authenticated
+        if (!token) {
+            router.push(`${ROUTES.LOGIN}?redirect=${ROUTES.PUBLIC_STORY_CREATE}`);
+            return;
+        }
+
+        const fetchData = async () => {
+            try {
+                const [categoriesRes, statsRes] = await Promise.all([
+                    storyService.getCategories(),
+                    storyService.getMyStats(token),
+                ]);
+
+                setCategories(categoriesRes.data || []);
+                setMyStats(statsRes.data);
+            } catch {
+                setError("Gagal memuat data");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, [token, router]);
+
+    const handleSubmit = async (data: CreateStoryRequest) => {
+        if (!token) return;
+
+        setSubmitting(true);
+        setError(null);
+
+        try {
+            await storyService.create(token, data);
+            router.push(`${ROUTES.PUBLIC_STORIES}?success=created`);
+        } catch {
+            setError("Gagal mengirim cerita. Silakan coba lagi.");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    // Check if user can create story
+    const canCreate = user && user.level >= 3;
+    const canSubmitMore = myStats?.can_submit_more ?? true;
+
+    if (loading) {
+        return (
+            <div className="public-page">
+                <Navbar variant="back" />
+                <div className="container mx-auto px-4 pt-28 pb-16 sm:pt-32 sm:pb-20">
+                    <div className="max-w-2xl mx-auto space-y-6">
+                        <div className="h-8 w-48 rounded bg-gray-200 animate-pulse" />
+                        <div className="h-4 w-72 rounded bg-gray-200 animate-pulse" />
+                        <div className="rounded-xl border bg-card p-6 space-y-4">
+                            <div className="h-5 w-32 rounded bg-gray-200 animate-pulse" />
+                            <div className="h-10 w-full rounded bg-gray-200 animate-pulse" />
+                            <div className="h-5 w-32 rounded bg-gray-200 animate-pulse" />
+                            <div className="h-10 w-full rounded bg-gray-200 animate-pulse" />
+                            <div className="h-5 w-32 rounded bg-gray-200 animate-pulse" />
+                            <div className="h-40 w-full rounded bg-gray-200 animate-pulse" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Level restriction
+    if (!canCreate) {
+        return (
+            <div className="public-page">
+                <Navbar variant="back" />
+                <main className="container mx-auto px-4 pt-28 pb-16 sm:pt-32 sm:pb-20">
+                    <PublicPageHero compact eyebrow="Ruang bercerita" title={<>Cerita akan <span>menunggu</span></>} description="Teruslah melangkah. Kesempatan untuk berbagi akan terbuka seiring perjalananmu." pose="map" />
+                    <div className="max-w-md mx-auto text-center">
+                        <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
+                            <Lock className="h-10 w-10 text-muted-foreground" />
+                        </div>
+                        <h2 className="text-2xl font-bold mb-4">Level 3 Diperlukan</h2>
+                        <p className="text-muted-foreground mb-6">
+                            Untuk berbagi cerita, kamu perlu mencapai level 3.
+                            Level kamu saat ini: <strong>Level {user?.level || 1}</strong>
+                        </p>
+                        <p className="text-sm text-muted-foreground mb-6">
+                            Terus beraktivitas di platform untuk meningkatkan level dan membuka fitur ini!
+                        </p>
+                        <Link href={ROUTES.PUBLIC_STORIES}>
+                            <Button>
+                                <ArrowLeft className="h-4 w-4 mr-2" />
+                                Kembali ke Cerita
+                            </Button>
+                        </Link>
+                    </div>
+                </main>
+                <Footer variant="landing" />
+            </div>
+        );
+    }
+
+    // Monthly limit reached
+    if (!canSubmitMore) {
+        return (
+            <div className="public-page">
+                <Navbar variant="back" />
+                <main className="container mx-auto px-4 pt-28 pb-16 sm:pt-32 sm:pb-20">
+                    <PublicPageHero compact eyebrow="Ruang bercerita" title={<>Sampai jumpa <span>bulan depan</span></>} description="Ceritamu sudah menemukan tempatnya bulan ini. Terima kasih sudah berbagi." pose="listen" />
+                    <div className="max-w-md mx-auto text-center">
+                        <div className="w-20 h-20 bg-orange-100 dark:bg-orange-950/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <AlertTriangle className="h-10 w-10 text-orange-500" />
+                        </div>
+                        <h2 className="text-2xl font-bold mb-4">Batas Bulanan Tercapai</h2>
+                        <p className="text-muted-foreground mb-6">
+                            Kamu sudah membagikan {myStats?.stories_this_month} cerita bulan ini
+                            (maksimal {myStats?.max_stories_per_month} cerita per bulan).
+                        </p>
+                        <p className="text-sm text-muted-foreground mb-6">
+                            Tunggu hingga bulan depan untuk berbagi cerita baru.
+                            {user && user.level >= 7 && " Sebagai pengguna Level 7+, kamu mendapatkan kuota tambahan!"}
+                        </p>
+                        <Link href={ROUTES.PUBLIC_STORIES}>
+                            <Button>
+                                <ArrowLeft className="h-4 w-4 mr-2" />
+                                Kembali ke Cerita
+                            </Button>
+                        </Link>
+                    </div>
+                </main>
+                <Footer variant="landing" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="public-page">
+            <Navbar variant="back" />
+
+            <main className="container mx-auto px-4 pt-28 pb-16 sm:pt-32 sm:pb-20">
+                <PublicPageHero compact headingLevel={2} eyebrow="Ruang bercerita" title={<>Ceritamu punya <span>tempat</span></>} description="Tulis perjalananmu dengan nyaman. Kamu bisa menjadi alasan seseorang merasa tidak sendirian." pose="message" />
+                <div className="max-w-2xl mx-auto">
+                    {/* Back Link */}
+                    <Link
+                        href={ROUTES.PUBLIC_STORIES}
+                        className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                        Kembali ke Cerita
+                    </Link>
+
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-8"
+                    >
+                        <h1 className="mb-2 text-2xl font-bold sm:text-3xl">Bagikan Ceritamu</h1>
+                        <p className="text-muted-foreground">
+                            Ceritakan perjalananmu. Kamu tidak sendirian, dan ceritamu bisa menginspirasi orang lain.
+                        </p>
+                    </motion.div>
+
+                    {/* Stats Info */}
+                    {myStats && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.1 }}
+                            className="mb-6 rounded-lg border border-red-100 bg-white/80 p-4"
+                        >
+                            <p className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                                <BarChart3 className="h-4 w-4" aria-hidden="true" />
+                                <span>Cerita bulan ini: {myStats.stories_this_month}/{myStats.max_stories_per_month}</span>
+                                {myStats.total_stories > 0 && ` • Total cerita: ${myStats.total_stories}`}
+                                {myStats.total_hearts > 0 && ` • Total hati: ${myStats.total_hearts}`}
+                            </p>
+                        </motion.div>
+                    )}
+
+                    {/* Error Alert */}
+                    {error && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-destructive/10 text-destructive rounded-lg p-4 mb-6"
+                        >
+                            <p>{error}</p>
+                        </motion.div>
+                    )}
+
+                    {/* Form */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                            className="rounded-xl border border-red-100 bg-card p-4 sm:p-6"
+                    >
+                        <StoryForm
+                            categories={categories}
+                            onSubmit={handleSubmit}
+                            isLoading={submitting}
+                            submitLabel="Kirim untuk Ditinjau"
+                        />
+                    </motion.div>
+                </div>
+            </main>
+
+            <Footer variant="landing" />
+        </div>
+    );
+}

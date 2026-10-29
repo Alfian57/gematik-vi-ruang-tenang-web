@@ -1,0 +1,168 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { communityService } from "@/services/api";
+import { useAuthStore } from "@/store/authStore";
+import { WeeklyProgress, PersonalJourney, LevelConfig } from "@/types";
+import { TrendingUp, TrendingDown, Zap, Activity, Award, ArrowRight, Trophy } from "lucide-react";
+import Link from "next/link";
+import { ROUTES } from "@/lib/routes";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+
+export function XPProgressWidget() {
+    const { token } = useAuthStore();
+    const [journey, setJourney] = useState<PersonalJourney | null>(null);
+    const [weeklyProgress, setWeeklyProgress] = useState<WeeklyProgress | null>(null);
+    const [levelConfigs, setLevelConfigs] = useState<LevelConfig[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        if (!token) return;
+
+        const fetchData = async () => {
+            try {
+                const [journeyRes, weeklyRes, levelConfigsRes] = await Promise.all([
+                    communityService.getPersonalJourney(token).catch(() => null),
+                    communityService.getWeeklyProgress(token).catch(() => null),
+                    communityService.getLevelConfigs().catch(() => null),
+                ]);
+                if (journeyRes?.data) setJourney(journeyRes.data);
+                if (weeklyRes?.data) setWeeklyProgress(weeklyRes.data);
+                if (Array.isArray(levelConfigsRes?.data)) setLevelConfigs(levelConfigsRes.data);
+            } catch {
+                // Silent fail
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [token]);
+
+    if (isLoading) {
+        return (
+            <Card className="member-widget-card shadow-sm flex flex-col">
+                <CardHeader>
+                    <div className="h-6 w-1/3 bg-gray-100 rounded animate-pulse" />
+                </CardHeader>
+                <CardContent className="flex-1">
+                    <div className="h-24 bg-gray-100 rounded-xl animate-pulse" />
+                </CardContent>
+            </Card>
+        );
+    }
+
+    if (!journey) {
+        return (
+            <Card className="member-widget-card flex flex-col relative overflow-hidden">
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                    <div>
+                        <CardTitle className="text-lg font-bold flex items-center gap-2">
+                            <Trophy className="w-5 h-5 text-yellow-500" />
+                            Level Anda
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                            Selesaikan tugas untuk mengumpulkan XP.
+                        </CardDescription>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="bg-yellow-50/50 p-4 rounded-xl border border-yellow-100 text-center space-y-2">
+                        <TrendingUp className="w-8 h-8 text-yellow-500 mx-auto" />
+                        <h4 className="font-semibold text-gray-800 text-sm">Mulai Petualangan!</h4>
+                        <p className="text-xs text-gray-500">Mulai tulis jurnal, dengar musik, atau pakai fitur ruang tenang untuk menaikkan level.</p>
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    const currentExp = Number(journey.current_exp ?? 0);
+    const currentLevel = Number(journey.current_level ?? 1);
+    const expToNextLevel = Number(journey.exp_to_next_level ?? 0);
+    const weeklyExp = Number(weeklyProgress?.this_week?.xp_earned ?? 0);
+    const monthlyExp = Number(journey.monthly_xp ?? 0);
+    const badgesEarned = Number(journey.new_badges_count ?? 0);
+    const progressPercent = Math.min(100, Math.max(0, Number(journey.progress_percent ?? 0)));
+    const nextLevelConfig = levelConfigs.find((item) => item.level === currentLevel + 1);
+    const nextTaskDescription = nextLevelConfig?.task_description?.trim();
+
+    // Determine trend from weekly change
+    const xpChange = Number(weeklyProgress?.xp_change ?? 0);
+    const weeklyTrend = xpChange > 0 ? "up" : xpChange < 0 ? "down" : "neutral";
+    const TrendIcon = weeklyTrend === "up" ? TrendingUp : weeklyTrend === "down" ? TrendingDown : Zap;
+    const trendColor = weeklyTrend === "up" ? "text-primary/80" : weeklyTrend === "down" ? "text-red-500" : "text-primary/60";
+
+    return (
+        <Card className="member-widget-card flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between px-4 pt-4 pb-1">
+                <CardTitle className="member-widget-heading text-lg font-bold flex items-center gap-2">
+                    <Zap className="member-widget-icon w-5 h-5" />
+                    Perjalananmu
+                </CardTitle>
+                <Link href={ROUTES.JOURNEY}>
+                    <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary/80">
+                        Detail <ArrowRight className="w-3 h-3 ml-1" />
+                    </Button>
+                </Link>
+            </CardHeader>
+
+            <CardContent className="flex-1 flex flex-col gap-3 px-4 pb-4 pt-2">
+                <div className="rounded-xl border border-primary/20 bg-white/70 p-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xl font-bold text-gray-900">Level {currentLevel}</span>
+                        <span
+                            className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{
+                                backgroundColor: journey.tier_color ? `${journey.tier_color}20` : "#f3f4f6",
+                                color: journey.tier_color || "#6b7280",
+                            }}
+                        >
+                            {journey.tier_name || `Level ${currentLevel}`}
+                        </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-1.5">{currentExp.toLocaleString()} XP</p>
+                    <div className="w-full h-2.5 bg-primary/10 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-linear-to-r from-primary to-primary rounded-full transition-all duration-500"
+                            style={{ width: `${progressPercent}%` }}
+                        />
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                        {expToNextLevel.toLocaleString()} XP lagi ke Level {currentLevel + 1}
+                    </p>
+                    {nextTaskDescription ? (
+                        <div className="mt-2 rounded-md border border-primary/20 bg-primary/10 px-2 py-1.5">
+                            <p className="text-[11px] font-semibold text-primary">Tugas Level Berikutnya</p>
+                            <p className="text-[11px] text-primary">{nextTaskDescription}</p>
+                        </div>
+                    ) : null}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-white rounded-lg p-2 text-center border border-primary/20">
+                        <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <TrendIcon className={`h-3.5 w-3.5 ${trendColor}`} />
+                        </div>
+                        <p className="text-sm font-bold text-gray-900">{weeklyExp.toLocaleString()}</p>
+                        <p className="text-[10px] text-gray-500">XP Minggu Ini</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 text-center border border-primary/20">
+                        <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <Activity className="h-3.5 w-3.5 text-primary/80" />
+                        </div>
+                        <p className="text-sm font-bold text-gray-900">{monthlyExp.toLocaleString()}</p>
+                        <p className="text-[10px] text-gray-500">XP Bulan Ini</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 text-center border border-primary/20">
+                        <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <Award className="h-3.5 w-3.5 text-amber-500" />
+                        </div>
+                        <p className="text-sm font-bold text-gray-900">{badgesEarned}</p>
+                        <p className="text-[10px] text-gray-500">Lencana</p>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}

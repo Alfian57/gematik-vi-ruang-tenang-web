@@ -1,0 +1,87 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { authService } from "@/services/api";
+import { ROUTES } from "@/lib/routes";
+
+const resetPasswordSchema = z.object({
+  password: z.string().min(6, "Password minimal 6 karakter"),
+  confirmPassword: z.string().min(6, "Password minimal 6 karakter"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Password tidak sama",
+  path: ["confirmPassword"],
+});
+
+type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
+
+export function useResetPassword() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token");
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Cleanup timer on unmount to prevent memory leak and state updates on unmounted component
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ResetPasswordFormData>({
+    resolver: zodResolver(resetPasswordSchema),
+  });
+
+  const onSubmit = async (data: ResetPasswordFormData) => {
+    if (!token) {
+      setError("Token reset password tidak valid atau hilang.");
+      return;
+    }
+
+    setError(null);
+    setIsLoading(true);
+    try {
+      await authService.resetPassword({
+        token: token,
+        password: data.password,
+        password_confirmation: data.confirmPassword
+      });
+      setIsSuccess(true);
+      redirectTimerRef.current = setTimeout(() => {
+        router.push(ROUTES.LOGIN);
+      }, 3000);
+    } catch (error) {
+      const err = error as Error;
+      if (err instanceof z.ZodError) {
+        setError("Gagal memproses respons dari server. Silakan coba lagi.");
+      } else {
+        setError(err.message || "Gagal mereset password. Token mungkin sudah kedaluwarsa.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return {
+    token,
+    isSuccess,
+    isLoading,
+    error,
+    errors,
+    register,
+    handleSubmit: handleSubmit(onSubmit),
+  };
+}

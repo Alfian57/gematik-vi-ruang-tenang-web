@@ -1,0 +1,86 @@
+# AGENTS.md — Ruang Tenang Web
+Dokumen ini adalah instruksi kanonis untuk AI agent dan contributor. Baca README.md, lalu buka dokumen di context/ sesuai area perubahan.
+
+CLAUDE.md, GEMINI.md, dan .github/copilot-instructions.md adalah adapter tipis yang merujuk ke dokumen ini; Cursor dan OpenCode memakai AGENTS.md sebagai instruction native.
+
+## Sumber kebenaran
+
+- Runtime truth: kode, package.json, next.config.ts, config/env.ts, workflow CI, dan .env.example.
+- Route truth: folder app/ dan lib/routes.ts.
+- API truth: anotasi/implementasi pada ruang-tenang-api, lalu service dan schema frontend.
+- Product truth: perilaku UI yang sudah terimplementasi; keputusan lintas platform dirangkum di context/ecosystem.md.
+- Jangan menganggap .orig, .rej, public/sw.js, atau source map sebagai sumber implementasi utama.
+
+## Cara bekerja
+
+1. Identifikasi role dan route yang terdampak sebelum mengedit.
+2. Ikuti alur page → hook/view-model → services/api → services/http/client.ts.
+3. Jangan memanggil fetch langsung dari page/component bila service domain sudah ada.
+4. Pertahankan validasi Zod, envelope API, normalisasi pagination/timestamp, dan error mapping.
+5. Perubahan fitur harus tetap aman untuk auth guard, role, responsive layout, accessibility, dan loading/error/empty state.
+6. Mutation offline hanya boleh memakai endpoint yang sudah diizinkan services/http/client.ts; jangan mengantrekan auth, chat, billing, admin, moderasi, push, atau endpoint sensitif.
+7. Gunakan @/ alias dan konvensi folder yang sudah ada. Hindari menambah dependency bila utilitas yang ada cukup.
+8. Jangan menaruh secret di kode, .env.local, bundle, log, atau dokumentasi.
+
+## Validasi
+
+- **Dilarang keras menjalankan testing atau validasi otomatis setelah selesai menyelesaikan tugas**.
+  AI Agent tidak boleh langsung mengeksekusi perintah testing (seperti `npm run test`, `npm run test:smoke`, `npm run lint`, `npm run typecheck`, `npm run build`, `npm run verify`, dsb.) begitu pengeditan kode selesai.
+- **Wajib meminta konfirmasi pengguna terlebih dahulu**: Setelah selesai melakukan perubahan kode, jelaskan perubahan yang dilakukan dan usulkan perintah pengujian yang relevan untuk dijalankan, lalu tunggu konfirmasi eksplisit dari pengguna sebelum mengeksekusinya.
+- **Jangan pernah menjalankan `npm run build` atau `npm run verify` tanpa izin eksplisit**. Jika build dibutuhkan untuk verifikasi akhir tetapi belum diminta, laporkan sebagai belum dijalankan dan minta konfirmasi pengguna.
+- Sebelum menyelesaikan giliran, gunakan pemeriksaan pasif seperti `git diff --check` untuk memastikan tidak ada konflik atau spasi rusak.
+- Jika environment tidak memungkinkan command dijalankan, laporkan command dan error sebenarnya; jangan menyatakan lulus.
+
+## Generated files dan deployment
+
+- Edit app/sw.ts, bukan public/sw.js hasil build. Jangan meregenerasi service worker melalui build tanpa permintaan eksplisit pengguna.
+- next.config.ts dan entrypoint.sh membentuk konfigurasi image/runtime; jangan menghapus placeholder runtime tanpa memahami deployment GHCR/VPS.
+- package-lock.json adalah lockfile npm yang dipakai Docker. Jangan mengubah bun.lock sebagai efek samping instalasi npm.
+- Workflow pada .github/workflows/build-and-deploy.yml adalah sumber kebenaran untuk trigger, variable, secret, dan deploy.
+
+## Format gambar dan performance
+
+- Format raster default untuk aset yang dikirim ke browser adalah **WebP**. Gunakan `next/image` dengan `width`/`height` atau ukuran responsif yang eksplisit agar browser dan Next.js dapat mengoptimalkan pengiriman gambar.
+- Untuk ilustrasi/foto biasa, gunakan WebP dengan kualitas sekitar 85–90. Untuk ilustrasi dengan teks, bentuk datar, atau detail referensi yang sensitif terhadap artefak, gunakan WebP lossless atau pertahankan PNG bila WebP merusak kualitas.
+- Pertahankan PNG/ICO untuk favicon, apple touch icon, kebutuhan kompatibilitas eksternal, atau master referensi AI beresolusi tinggi yang menunjukkan artefak setelah konversi. Jangan mengonversi hanya demi ekstensi jika hasil visualnya memburuk.
+- Jangan menyimpan dua format untuk aset runtime yang sama tanpa alasan kompatibilitas yang jelas. Setelah konversi, perbarui semua referensi source dan smoke test, lalu hapus salinan runtime lama yang tidak lagi dipakai.
+- Aset runtime yang sudah menggunakan WebP: `/images/landing/about-illustration.webp`, `/images/landing/about-doctor.webp`, dan `/coin.webp`.
+- `public/sw.js` adalah hasil generate; jangan diedit manual. Perubahan daftar aset akan tercermin saat service worker dibuat ulang oleh build yang hanya dijalankan setelah diminta pengguna.
+
+## Referensi maskot Ruang Tenang
+
+- Aset kanonis maskot: `assets/mascot/mascot.png`.
+- Lembar turnaround kanonis: `assets/mascot/mascot-turnaround.webp` (lossless WebP).
+- `mascot.png` adalah master referensi AI beresolusi tinggi dan tetap PNG karena efek glow/transparansinya menimbulkan artefak saat dikompresi ke WebP. Turnaround sheet sudah aman dikonversi ke WebP lossless.
+- Setiap permintaan generate atau edit maskot dengan AI image generator **wajib menggunakan kedua file tersebut sebagai referensi**. Gunakan `mascot.png` untuk tampilan utama dan warna, serta `mascot-turnaround.webp` untuk menjaga bentuk, proporsi, atribut, dan konsistensi tampak depan/samping/belakang.
+- Pertahankan identitas berikut kecuali pengguna meminta perubahan: kepala bulat, badan rose-coral, cape crimson dengan lining navy, trim gold, emblem empat bidang membulat terinspirasi logo Ruang Tenang, serta orb dengan simbol hati dan gelombang napas.
+- Jangan menambahkan wordmark, teks, atau watermark ke maskot kecuali diminta secara eksplisit. Simpan hasil referensi baru sebagai file sibling di folder `assets/mascot/`; salin/konversi ke `public/` hanya jika pengguna meminta maskot dipakai sebagai aset runtime. Jangan menimpa dua aset kanonis tanpa instruksi eksplisit.
+- Pustaka pose tambahan untuk halaman publik/auth: `assets/mascot/mascot-{read,listen,map,trophy,message,secure,key}.png` (sumber transparan); versi runtime WebP bernama `{read,listen,map,trophy,message,secure,key}.webp` ada di `public/images/landing/mascot/`. Pose ini adalah turunan, bukan pengganti dua referensi kanonis di atas.
+- Komposisi auth asli disimpan sebagai `assets/mascot/mascot-auth-{welcome,heart,secure,key}.png`. Versi aktif tanpa ornamen terlepas ada di `assets/mascot/mascot-auth-{welcome,heart,secure,key}-cutout.png`, dengan runtime WebP `public/images/landing/mascot/auth-{welcome,heart,secure,key}-cutout.webp`. Kertas, bintang, dan orb kecil ditata terpisah lewat komponen/CSS agar responsif. Ini semua turunan; tetap pakai dua referensi kanonis saat membuat varian baru. Screenshot layout pihak lain hanya boleh dipakai sebagai acuan framing, bukan identitas visual.
+- Pose turunan dashboard member dan check-in: `assets/mascot/mascot-{checkin,student-welcome}.png` (sumber transparan) dengan runtime `public/images/dashboard/mascot/{checkin,student-welcome}.webp`. Keduanya tetap turunan; untuk generasi berikutnya gunakan **dua referensi kanonis** di atas, bukan hanya pose ini.
+- Pose turunan hub Musik dan FAB Misi Harian: `assets/mascot/mascot-{music-headphones,daily-missions}.png` (sumber transparan) dengan runtime WebP `public/images/dashboard/mascot/{music-headphones,daily-missions}.webp`. Tetap gunakan dua referensi kanonis untuk pose berikutnya.
+- Pose turunan peta perjalanan: `assets/mascot/mascot-checkpoint-{explore,flag}.png` (sumber transparan) dengan runtime WebP `public/images/landing/mascot/checkpoint-{explore,flag}.webp`. Keduanya menjaga identitas dari dua referensi kanonis dan dipakai pada kartu pemilihan checkpoint.
+- Ilustrasi maskot untuk seluruh tier perjalanan: sumber PNG `assets/mascot/mascot-journey-tier-<01-10>-<theme>.png`; aset WebP 512×512 dipakai dengan nama yang sama seperti tier di `public/images/journey/`. Semua pose dibuat dari dua referensi kanonis dan digunakan di peta serta detail tier.
+- Pose placeholder artikel: `assets/mascot/mascot-article-placeholder.png` (sumber transparan) dengan runtime WebP `public/images/dashboard/mascot/article-placeholder.webp`. Seluruh tampilan thumbnail artikel memakai komponen bersama `components/shared/articles/ArticleThumbnail.tsx` agar fallback tanpa sampul konsisten. Gunakan dua referensi kanonis saat membuat varian berikutnya.
+- Pose chat: `assets/mascot/mascot-chat-{welcome,listen}.png` (sumber transparan) dengan runtime WebP `public/images/dashboard/mascot/chat-{welcome,listen}.webp`. Sambutan chat memakai pose welcome, sedangkan avatar bot, indikator balasan, dan panel dikte memakai pose listen. Keduanya dibuat dari dua referensi kanonis di atas.
+- Pose tur RuNa per langkah: sumber transparan `assets/mascot/mascot-tour-{guide,mood,support,chat,journal,articles,music,community,journey,missions}.png` dan WebP runtime `public/images/dashboard/mascot/tour-{guide,mood,support,chat,journal,articles,music,community,journey,missions}.webp`. Sepuluh langkah memilih pose unik; orientasi gestur dicerminkan di desktop agar mengarah ke sorotan. Pose welcome lama tetap tersedia, tetapi bukan bagian dari urutan tour aktif. Semua turunan harus dibuat dari dua referensi kanonis.
+
+## Dokumentasi dan koordinasi
+
+- Jika route, role, environment, service API, response mapping, offline policy, atau deployment berubah, perbarui README/context pada perubahan yang sama.
+- Perubahan contract API harus menyebut endpoint/response yang terdampak dan disinkronkan dengan repository API serta mobile.
+- Gunakan context/README.md untuk memilih dokumen; jangan menyalin seluruh context ke file adapter agent.
+- Jangan melakukan perubahan database, deployment, migrasi, atau penghapusan data sebagai bagian dari pekerjaan dokumentasi tanpa instruksi eksplisit.
+
+## Data sensitif dan AI
+
+- Perlakukan journal, chat dan context AI, mood, profil, laporan moderasi, serta billing sebagai data pribadi. Batasi data yang ditampilkan, disimpan, atau dicatat ke kebutuhan fitur dan hak akses pengguna.
+- Backend API adalah otoritas untuk autentikasi, role, dan ownership. State persetujuan AI disimpan melalui API, sedangkan client menjaga gate/disclaimer chat sesuai alur produk; UI gate bukan kontrol akses server.
+- Prompt/model AI, kuota, moderasi, dan kebijakan krisis dimiliki API. Web memakai kontrak yang tersedia; jangan menanam prompt sistem, provider credential, atau akses model langsung ke client.
+- Pertahankan consent dan disclaimer AI, pilihan privasi journal, serta state error/fallback yang disediakan API.
+
+## Code review rules
+
+- Flag request API langsung dari UI, bypass auth/role checks, secret NEXT_PUBLIC_* yang tidak aman, dan mutation offline yang melewati allowlist.
+- Flag link/path dokumentasi yang menunjuk struktur lama atau sibling path yang tidak tersedia saat repo di-clone sendiri.
+- Jangan gunakan ikon UI `Sparkles`, `Star`, atau ikon bintang lain sebagai penanda AI generik, aksen dekoratif, pilihan/featured, EXP, atau badge. Pilih ikon sesuai fungsi: `MessageCircle` untuk percakapan, `CalendarCheck` untuk check-in, `Lightbulb`/`TrendingUp` untuk insight, `BadgeCheck` untuk konten pilihan/terverifikasi, dan `Award`/`Trophy` untuk pencapaian. Simbol bintang yang digambar sebagai objek koleksi di dalam artwork game bukan ikon UI dan boleh dipertahankan.

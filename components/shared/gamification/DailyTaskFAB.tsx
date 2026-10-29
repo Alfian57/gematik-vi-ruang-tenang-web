@@ -1,0 +1,466 @@
+"use client";
+
+import Link from "next/link";
+import Image from "next/image";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Check, Gift, Lock, RefreshCw, PartyPopper, Trophy, X, Rocket, Crown, MessageCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/utils";
+import type { DailyTask, XPBoostStatus } from "@/types";
+import { toast } from "sonner";
+import { useAuthStore } from "@/store/authStore";
+import { useMusicPlayerStore } from "@/store/musicPlayerStore";
+import { useDailyTaskStore } from "@/store/dailyTaskStore";
+import { CoinIcon } from "@/components/shared/CoinIcon";
+import { ROUTES } from "@/lib/routes";
+import { GamificationIcon } from "./GamificationIcon";
+
+interface DailyTaskFABProps {
+  className?: string;
+  isSidebarOpen?: boolean;
+  xpBoost: XPBoostStatus | null;
+}
+
+export function DailyTaskFAB({ className, isSidebarOpen = false, xpBoost }: DailyTaskFABProps) {
+  const { token, user, refreshUser } = useAuthStore();
+  const [isOpen, setIsOpen] = useState(false);
+  const { tasks, isLoading, hasError, claimingId, loadTasks, claimTask } = useDailyTaskStore();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const isPlayerVisible = useMusicPlayerStore((s) => s.isPlayerVisible);
+  const currentSong = useMusicPlayerStore((s) => s.currentSong);
+  const isMinimized = useMusicPlayerStore((s) => s.isMinimized);
+  const showMusicPlayer = isPlayerVisible && currentSong;
+  const hasXPBoost = Boolean(xpBoost && xpBoost.remaining_seconds > 0);
+  const boostMultiplier = hasXPBoost ? Math.max(1, xpBoost?.multiplier ?? 1) : 1;
+  const closePanel = useCallback(() => {
+    setIsOpen(false);
+    triggerRef.current?.focus();
+  }, []);
+
+  const formatRemaining = (seconds: number) => {
+    if (seconds <= 0) return "berakhir";
+
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (hours > 0) {
+      return `${hours}j ${minutes}m`;
+    }
+
+    return `${Math.max(1, minutes)}m`;
+  };
+
+  useEffect(() => {
+    void loadTasks(token);
+  }, [loadTasks, token]);
+
+  // Refresh tasks when the panel is opened
+  useEffect(() => {
+    if (isOpen) {
+      void loadTasks(token, true);
+    }
+  }, [isOpen, loadTasks, token]);
+
+  // Poll every 30s so FAB stays in sync with other components
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(() => void loadTasks(token, true), 30_000);
+    return () => clearInterval(interval);
+  }, [loadTasks, token]);
+
+  useEffect(() => {
+    if (isSidebarOpen) {
+      setIsOpen(false);
+    }
+  }, [isSidebarOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    closeRef.current?.focus();
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closePanel();
+      }
+    };
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [isOpen, closePanel]);
+
+  const handleClaim = async (task: DailyTask) => {
+    if (!token || claimingId !== null) return;
+
+    try {
+      const response = await claimTask(token, task.id);
+      if (response) {
+        const parts = [`+${response.xp_earned} XP`];
+        if (response.coin_earned) parts.push(`+${response.coin_earned} koin`);
+        if (hasXPBoost) parts.push(`Boost x${boostMultiplier}`);
+        toast.success(`Berhasil klaim! ${parts.join(", ")}`);
+        if (response.level_up) {
+          toast.success("Naik Level!", {
+            description: (
+              <span className="inline-flex items-center gap-1.5">
+                Selamat! Kamu naik level
+                <PartyPopper className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+              </span>
+            ),
+          });
+        }
+        refreshUser(); // Refresh user data to update EXP in navbar
+      }
+    } catch (error) {
+      console.error("Failed to claim task:", error);
+      toast.error("Gagal mengklaim hadiah");
+    } finally {
+      // State klaim dibersihkan oleh store bersama.
+    }
+  };
+
+  // Calculate stats
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter((t) => t.is_completed).length;
+  const claimableTasks = tasks.filter((t) => t.is_completed && !t.is_claimed).length;
+  const claimedTasks = tasks.filter((t) => t.is_claimed).length;
+  const progressPercent = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+  const showPremiumTeasers = user?.role === "user" && !user?.is_premium && !tasks.some((task) => task.premium_only);
+
+  if (!token || user?.role !== "user") return null;
+
+  return (
+    <>
+      {/* Backdrop when open - click to close */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-30"
+          onClick={closePanel}
+        />
+      )}
+
+      <div
+        className={cn(
+          "fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-3 z-40 sm:bottom-6 sm:right-6 transition-all duration-300",
+          showMusicPlayer && (isMinimized ? "max-sm:bottom-22 sm:bottom-24" : "max-sm:bottom-34 sm:bottom-36"),
+          isSidebarOpen && "max-lg:opacity-0 max-lg:pointer-events-none",
+          className
+        )}
+      >
+        {/* Panel (above FAB) */}
+        <div
+          id="daily-missions-panel"
+          role="dialog"
+          aria-label="Misi Harian"
+          aria-hidden={!isOpen}
+          inert={!isOpen}
+          className={cn(
+            "absolute bottom-full right-0 mb-3 w-[calc(100vw-1.5rem)] max-w-sm origin-bottom-right overflow-visible transition-all duration-300 motion-reduce:transition-none sm:w-96 sm:max-w-none",
+            isOpen
+              ? "opacity-100 scale-100 translate-y-0"
+              : "opacity-0 scale-95 translate-y-4 pointer-events-none"
+          )}
+        >
+          <div className="flex max-h-[min(55dvh,31rem)] w-full flex-col overflow-hidden rounded-[1.75rem] border border-theme-accent-border bg-white shadow-2xl sm:max-h-[min(70dvh,35rem)]">
+            {/* Header */}
+            <div className="theme-fab-bg relative shrink-0 overflow-hidden p-4 pr-24 text-white sm:p-5 sm:pr-28">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+
+              <div className="relative z-20 flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Trophy className="w-5 h-5" />
+                    <h3 className="font-bold text-lg">Misi Harian</h3>
+                  </div>
+                  <p className="text-white/80 text-xs">Selesaikan misi, klaim hadiahmu!</p>
+                </div>
+                <button
+                  ref={closeRef}
+                  onClick={closePanel}
+                  aria-label="Tutup misi harian"
+                  className="absolute -right-20 top-0 rounded-full bg-white/20 p-1.5 transition-colors hover:bg-white/30 sm:-right-24"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Progress bar */}
+              <div className="relative z-20 mt-3 flex items-center gap-3">
+                <div className="flex-1 h-2.5 bg-black/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-white transition-all duration-500 rounded-full"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <span className="text-sm font-bold min-w-10 text-right">
+                  {claimedTasks}/{totalTasks}
+                </span>
+              </div>
+
+              {hasXPBoost && (
+                <div className="mt-3 rounded-xl border border-white/30 bg-white/15 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-white">
+                      <Rocket className="h-3.5 w-3.5" />
+                      XP Boost x{boostMultiplier}
+                    </span>
+                    <span className="text-[11px] font-medium text-white/90">
+                      {formatRemaining(xpBoost?.remaining_seconds ?? 0)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Tasks list */}
+            <div className="relative z-20 min-h-0 flex-1 divide-y overflow-y-auto overscroll-contain bg-white">
+
+            {hasError && totalTasks > 0 && <div className="flex items-center justify-between gap-2 bg-amber-50 px-3 py-2 text-xs text-amber-900"><span>Progres terbaru belum tersinkron.</span><Button size="sm" variant="ghost" className="h-7 shrink-0 text-amber-900" onClick={() => void loadTasks(token, true)}>Coba lagi</Button></div>}
+            {isLoading ? (
+              <div className="p-6 text-center">
+                <RefreshCw className="w-6 h-6 mx-auto animate-spin text-gray-400 mb-2" />
+                <p className="text-sm text-gray-500">Memuat misi...</p>
+              </div>
+            ) : hasError && totalTasks === 0 ? (
+              <div className="p-6 text-center">
+                <p className="font-semibold text-slate-800">Misi belum bisa dimuat</p>
+                <p className="mt-1 text-xs text-slate-500">Coba lagi saat koneksi sudah stabil.</p>
+                <Button size="sm" variant="outline" className="mt-3" onClick={() => void loadTasks(token, true)}>Coba lagi</Button>
+              </div>
+            ) : totalTasks === 0 ? (
+              <div className="p-6 text-center">
+                <p className="font-semibold text-slate-800">Belum ada misi hari ini</p>
+                <p className="mt-1 text-xs text-slate-500">Bulan Pulih akan menemanimu saat misi baru tersedia.</p>
+              </div>
+            ) : (
+              tasks.map((task) => {
+                const boostedXP = Math.round(task.xp_reward * boostMultiplier);
+
+                return (
+                  <div
+                    key={task.id}
+                    className={cn(
+                      "p-3 flex items-center justify-between hover:bg-gray-50 transition-colors",
+                      task.is_claimed && "bg-green-50/50"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={cn(
+                          "w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-base",
+                          task.is_claimed
+                            ? "bg-green-100 text-green-600"
+                            : task.is_completed
+                              ? "theme-accent-light-bg theme-accent-text"
+                              : "bg-gray-100 text-gray-400"
+                        )}
+                      >
+                        <GamificationIcon name={task.task_type || task.task_icon} className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4
+                          className={cn(
+                            "font-medium text-sm",
+                            task.is_claimed && "text-green-700"
+                          )}
+                        >
+                          {task.task_name}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 font-medium">
+                            +{boostedXP} XP
+                          </span>
+                          {hasXPBoost && boostedXP !== task.xp_reward && (
+                            <span className="text-[10px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded border border-orange-200 font-medium">
+                              x{boostMultiplier}
+                            </span>
+                          )}
+                          {task.premium_only && (
+                            <span className="text-[10px] bg-violet-50 text-violet-700 px-1.5 py-0.5 rounded border border-violet-200 font-medium inline-flex items-center gap-0.5">
+                              <Crown className="w-3 h-3" />
+                              Premium
+                            </span>
+                          )}
+                          {task.coin_reward > 0 && (
+                            <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 font-medium inline-flex items-center gap-0.5">
+                              <CoinIcon className="w-3 h-3" />
+                              +{task.coin_reward}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-gray-400">
+                            {task.current_count}/{task.target_count}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {task.is_claimed ? (
+                        <div className="flex items-center gap-1 text-green-600">
+                          <Check className="w-4 h-4" />
+                        </div>
+                      ) : task.is_completed ? (
+                        <Button
+                          size="sm"
+                          onClick={() => handleClaim(task)}
+                          disabled={claimingId === task.id}
+                          className={cn(
+                            "theme-accent-bg theme-accent-bg-hover text-white rounded-full h-7 px-3 text-xs shadow-sm font-medium",
+                            claimingId === task.id && "opacity-80"
+                          )}
+                          style={{ backgroundColor: `var(--theme-accent)` }}
+                        >
+                          {claimingId === task.id ? (
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Gift className="w-3 h-3 mr-1" />
+                              Klaim
+                            </>
+                          )}
+                        </Button>
+                      ) : (
+                        <div className="w-7 h-7 rounded-full border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-300">
+                          <Lock className="w-3 h-3" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+
+            {showPremiumTeasers && (
+              <>
+                {[
+                  {
+                    name: "Deep Chat Premium",
+                    description: "6 pesan reflektif dengan AI",
+                    xp: 55,
+                    coins: 8,
+                    icon: MessageCircle,
+                  },
+                ].map((task) => {
+                  const TaskIcon = task.icon;
+                  return (
+                  <div key={task.name} className="p-3 flex items-center justify-between bg-violet-50/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-base bg-violet-100 text-violet-600">
+                        <TaskIcon className="h-4 w-4" aria-hidden="true" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium text-sm text-violet-950">{task.name}</h4>
+                          <span className="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded border border-violet-200 font-medium inline-flex items-center gap-0.5">
+                            <Crown className="w-3 h-3" />
+                            Premium
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                          <span className="text-[10px] text-violet-700">{task.description}</span>
+                          <span className="text-[10px] bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 font-medium">
+                            +{task.xp} XP
+                          </span>
+                          <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 font-medium inline-flex items-center gap-0.5">
+                            <CoinIcon className="w-3 h-3" />
+                            +{task.coins}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button asChild size="sm" variant="outline" className="h-7 shrink-0 rounded-full border-violet-200 bg-white px-3 text-xs text-violet-700 hover:bg-violet-100">
+                      <Link href={ROUTES.BILLING}>
+                        <Lock className="w-3 h-3 mr-1" />
+                        Unlock
+                      </Link>
+                    </Button>
+                  </div>
+                  );
+                })}
+              </>
+            )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 bg-gray-50 border-t">
+              <p className="text-[10px] text-center text-gray-400">
+                Reset setiap hari pukul 00:00 WIB
+              </p>
+            </div>
+          </div>
+
+          <Image
+            src="/images/dashboard/mascot/daily-missions.webp"
+            alt=""
+            width={120}
+            height={170}
+            sizes="144px"
+            className="pointer-events-none absolute -top-8 right-0 z-10 h-36 w-auto object-contain drop-shadow-lg sm:-top-9 sm:h-40"
+            style={{ width: "auto" }}
+          />
+        </div>
+
+        {/* FAB Button */}
+        <button
+          ref={triggerRef}
+          type="button"
+          data-user-tour="daily-missions"
+          aria-label={isOpen ? "Tutup misi harian" : `Buka misi harian${claimableTasks ? `, ${claimableTasks} siap diklaim` : ""}`}
+          aria-controls="daily-missions-panel"
+          aria-expanded={isOpen}
+          onClick={() => setIsOpen(!isOpen)}
+          className={cn(
+            "w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 relative group",
+            "theme-fab-bg",
+            "hover:shadow-xl hover:scale-105 active:scale-95",
+            isOpen && "rotate-180 bg-linear-to-br from-gray-600 to-gray-700",
+            hasXPBoost && !isOpen && "ring-4 ring-theme-accent/50 shadow-[0_0_0_8px_rgba(var(--color-theme-accent),0.14)]",
+            claimableTasks > 0 && !isOpen && "motion-safe:animate-bounce"
+          )}
+        >
+          {/* Glow effect */}
+          {claimableTasks > 0 && !isOpen && (
+            <div className="absolute inset-0 rounded-full theme-fab-bg opacity-40 motion-safe:animate-ping" />
+          )}
+
+          {/* Icon */}
+          <div className="relative">
+            {isOpen ? (
+              <X className="w-6 h-6 text-white" />
+            ) : (
+              <Image src="/images/dashboard/mascot/daily-missions.webp" alt="" width={48} height={60} className="h-12 w-auto object-contain" style={{ width: "auto" }} />
+            )}
+          </div>
+
+          {/* Badge counter */}
+          {claimableTasks > 0 && !isOpen && (
+            <div className="absolute -top-1 -right-1 w-5 h-5 theme-notification-bg text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-md border-2 border-white">
+              {claimableTasks}
+            </div>
+          )}
+
+          {hasXPBoost && !isOpen && (
+            <div className="absolute -bottom-1 -left-1 min-w-8 h-5 px-1.5 rounded-full bg-theme-accent text-white text-[10px] font-bold inline-flex items-center justify-center gap-0.5 border-2 border-white shadow-md">
+              <Rocket className="h-2.5 w-2.5" />
+              x{boostMultiplier}
+            </div>
+          )}
+
+          {/* Tooltip */}
+          {!isOpen && (
+            <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <span className="font-medium">Misi Harian</span>
+              {claimableTasks > 0 && (
+                <span className="ml-1" style={{ color: `var(--theme-accent-border)` }}>({claimableTasks} siap klaim)</span>
+              )}
+              {hasXPBoost && (
+                <span className="ml-1 text-theme-accent-border">• Boost x{boostMultiplier}</span>
+              )}
+              <div className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-full border-8 border-transparent border-l-gray-800" />
+            </div>
+          )}
+        </button>
+      </div>
+    </>
+  );
+}

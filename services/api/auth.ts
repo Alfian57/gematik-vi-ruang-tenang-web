@@ -1,0 +1,147 @@
+import { httpClient } from "@/services/http/client";
+import type { ApiResponse } from "@/services/http/types";
+import type { User, LoginResponse } from "@/types";
+import { z } from "zod";
+
+type RegisterRole = "user";
+
+const userSchema: z.ZodType<User, z.ZodTypeDef, unknown> = z
+  .object({
+    id: z.number(),
+    name: z.string(),
+    email: z.string().email(),
+    whatsapp_number: z.string().optional(),
+    whatsapp_verified: z.boolean().optional(),
+    avatar: z.string().optional(),
+    role: z.enum(["admin", "user", "mitra"]).catch("user"),
+    exp: z.number().catch(0),
+    gold_coins: z.number().catch(0),
+    level: z.number().catch(1),
+    badge_name: z.string().catch(""),
+    badge_icon: z.string().catch(""),
+    has_accepted_ai_disclaimer: z.boolean().optional(),
+    content_warning_preference: z.enum(["show", "hide_all", "ask_each_time"]).optional(),
+    is_suspended: z.boolean().optional(),
+    suspension_end: z.string().optional(),
+    is_banned: z.boolean().optional(),
+    is_forum_blocked: z.boolean().optional(),
+    created_at: z.string().catch(""),
+  })
+  .passthrough();
+
+const paginationMetaSchema = z.object({
+  page: z.number(),
+  limit: z.number(),
+  total_items: z.number(),
+  total_pages: z.number(),
+  has_next: z.boolean(),
+  has_prev: z.boolean(),
+});
+
+const apiResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
+  z.object({
+    data: dataSchema,
+    meta: paginationMetaSchema.optional(),
+    requestId: z.string().optional(),
+  });
+
+const loginResponseSchema = apiResponseSchema(
+  z.object({
+    token: z.string().min(1),
+    user: userSchema,
+  })
+);
+
+const verificationResponseSchema = apiResponseSchema(
+  z.object({
+    verification_required: z.literal(true),
+    verification_token: z.string().min(1),
+    phone_required: z.boolean().catch(false),
+  })
+);
+
+export type PhoneVerificationChallenge = { verification_token: string; phone_required: boolean };
+
+const userResponseSchema = apiResponseSchema(userSchema);
+
+const nullableResponseSchema = apiResponseSchema(z.null().nullable().optional().default(null));
+
+export const authService = {
+  async login(email: string, password: string, rememberMe?: boolean): Promise<ApiResponse<LoginResponse> | ApiResponse<PhoneVerificationChallenge & { verification_required: true }>> {
+    const response = await httpClient.post<ApiResponse<LoginResponse | PhoneVerificationChallenge>>("/auth/login", {
+      email,
+      password,
+      remember_me: rememberMe,
+    });
+    if (response.data && "verification_required" in response.data && response.data.verification_required) {
+      return verificationResponseSchema.parse(response);
+    }
+    return loginResponseSchema.parse(response);
+  },
+
+  async setVerificationPhone(challenge: string, whatsappNumber: string): Promise<void> {
+    await httpClient.post("/auth/verification/phone", { verification_token: challenge, whatsapp_number: whatsappNumber });
+  },
+
+  async verifyPhone(challenge: string, code: string): Promise<ApiResponse<LoginResponse>> {
+    const response = await httpClient.post<ApiResponse<LoginResponse>>("/auth/verification/verify", { verification_token: challenge, code });
+    return loginResponseSchema.parse(response);
+  },
+
+  async register(
+    name: string,
+    email: string,
+    password: string,
+    passwordConfirmation: string,
+    whatsAppNumber: string,
+    role: RegisterRole = "user"
+  ): Promise<ApiResponse<User>> {
+    const response = await httpClient.post<ApiResponse<User>>("/auth/register", {
+      name,
+      email,
+      password,
+      password_confirmation: passwordConfirmation,
+      whatsapp_number: whatsAppNumber,
+      role,
+    });
+    return userResponseSchema.parse(response);
+  },
+
+  async forgotPassword(email: string): Promise<ApiResponse<null>> {
+    const response = await httpClient.post<ApiResponse<null>>("/auth/forgot-password", { email });
+    return nullableResponseSchema.parse(response);
+  },
+
+  async resetPassword(data: { email?: string; token: string; password: string; password_confirmation: string }): Promise<ApiResponse<null>> {
+    // Backend expects `new_password` + `password_confirmation`; the form field is
+    // named `password` for UX, so map it here. `email` is ignored server-side
+    // (the token alone authorizes the reset) but kept for backward compatibility.
+    const response = await httpClient.post<ApiResponse<null>>("/auth/reset-password", {
+      ...(data.email ? { email: data.email } : {}),
+      token: data.token,
+      new_password: data.password,
+      password_confirmation: data.password_confirmation,
+    });
+    return nullableResponseSchema.parse(response);
+  },
+
+  async getProfile(token: string): Promise<ApiResponse<User>> {
+    const response = await httpClient.get<ApiResponse<User>>("/auth/me", { token });
+    return userResponseSchema.parse(response);
+  },
+
+  async updateProfile(token: string, data: { name?: string; email?: string; whatsapp_number?: string; bio?: string; avatar?: string; avatar_url?: string }): Promise<ApiResponse<User>> {
+    const avatar = data.avatar || data.avatar_url;
+    const payload = {
+      ...data,
+      ...(avatar ? { avatar, avatar_url: avatar } : {}),
+    };
+    const response = await httpClient.put<ApiResponse<User>>("/auth/profile", payload, { token });
+    return userResponseSchema.parse(response);
+  },
+
+  async updatePassword(token: string, data: { old_password: string; new_password: string; new_password_confirmation: string }): Promise<ApiResponse<null>> {
+    const response = await httpClient.put<ApiResponse<null>>("/auth/password", data, { token });
+    return nullableResponseSchema.parse(response);
+  },
+};

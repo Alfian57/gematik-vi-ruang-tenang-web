@@ -1,0 +1,52 @@
+"use client";
+
+import { useModerationReports } from "./_hooks/useModerationReports";
+import { ModerationReportsHeader } from "./_components/ModerationReportsHeader";
+import { ModerationReportsList } from "./_components/ModerationReportsList";
+
+export default function ModerationReportsPage() {
+    const {
+        statusFilter,
+        typeFilter,
+        reasonFilter,
+        searchQuery,
+        page,
+        reports,
+        focusId,
+        isLoading,
+        totalPages,
+        setStatusFilter,
+        setTypeFilter,
+        setReasonFilter,
+        setSearchQuery,
+        setPage,
+        loadReports,
+    } = useModerationReports();
+
+    return (
+        <div className="space-y-6 py-4 lg:py-6">
+            <ModerationReportsHeader
+                statusFilter={statusFilter}
+                setStatusFilter={setStatusFilter}
+                typeFilter={typeFilter}
+                setTypeFilter={setTypeFilter}
+                reasonFilter={reasonFilter}
+                setReasonFilter={setReasonFilter}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                isLoading={isLoading}
+                onRefresh={loadReports}
+            />
+
+            <ModerationReportsList
+                reports={reports}
+                isLoading={isLoading}
+                searchQuery={searchQuery}
+                totalPages={totalPages}
+                page={page}
+                focusId={focusId}
+                setPage={setPage}
+            />
+        </div>
+    );
+}

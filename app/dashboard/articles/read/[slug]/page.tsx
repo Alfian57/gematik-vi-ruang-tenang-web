@@ -1,0 +1,159 @@
+"use client";
+
+import Link from "next/link";
+import { ArrowLeft, FileText } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useArticleDetail } from "./_hooks/useArticleDetail";
+import { ArticleContent } from "./_components/ArticleContent";
+import { ArticleSidebar } from "./_components/ArticleSidebar";
+
+export default function DashboardArticleDetailPage() {
+  const {
+    article,
+    relatedArticles,
+    isLoading,
+    isAdmin,
+    isArticleAuthor,
+    authorId,
+    showBlockConfirm,
+    setShowBlockConfirm,
+    isBlocking,
+    isBlocked,
+    handleBlockUser,
+    getBackLink,
+    router,
+  } = useArticleDetail();
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-7xl py-4 sm:py-6">
+        <div className="mb-6 flex items-center gap-4">
+          <Button aria-label="Kembali" variant="ghost" size="icon" className="rounded-xl" onClick={() => router.back()}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="h-6 bg-gray-200 rounded w-48 animate-pulse" />
+        </div>
+        <div className="grid min-w-0 gap-6 lg:grid-cols-12 lg:gap-8">
+          <div className="lg:col-span-8">
+            <Card className="theme-accent-border-soft rounded-3xl border bg-white p-5 shadow-sm sm:p-7 lg:p-8">
+              <div className="animate-pulse space-y-4">
+                <div className="h-8 bg-gray-200 rounded w-3/4" />
+                <div className="h-4 bg-gray-200 rounded w-1/4" />
+                <div className="h-64 bg-gray-200 rounded" />
+                <div className="space-y-2">
+                  <div className="h-4 bg-gray-200 rounded" />
+                  <div className="h-4 bg-gray-200 rounded" />
+                  <div className="h-4 bg-gray-200 rounded w-5/6" />
+                </div>
+              </div>
+            </Card>
+          </div>
+          <div className="lg:col-span-4">
+            <div className="h-6 bg-gray-200 rounded w-32 mb-4" />
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <Card key={i} className="p-3 animate-pulse">
+                  <div className="flex gap-3">
+                    <div className="w-20 h-16 bg-gray-200 rounded-lg" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-gray-200 rounded" />
+                      <div className="h-3 bg-gray-200 rounded w-2/3" />
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!article) {
+    return (
+      <div className="py-4 lg:py-6">
+        <div className="flex items-center gap-4 mb-6">
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <span className="text-gray-500">Kembali</span>
+        </div>
+        <div className="theme-accent-border-soft rounded-3xl border bg-white px-5 py-16 text-center shadow-sm">
+          <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-500">Artikel tidak ditemukan</h3>
+          <p className="text-gray-400 text-sm mt-1 mb-4">
+            Artikel yang Anda cari mungkin sudah dihapus atau tidak tersedia
+          </p>
+          <Button variant="outline" className="rounded-xl" onClick={() => router.back()}>
+            Kembali
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-7xl py-4 sm:py-6">
+      {/* Header */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <Button asChild variant="ghost" size="icon" className="rounded-xl">
+          <Link href={getBackLink()} aria-label="Kembali ke daftar artikel">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+        </Button>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-theme-accent-dark">Ruang baca</p>
+          <h1 className="text-lg font-bold text-slate-900">Artikel pilihan untukmu</h1>
+        </div>
+      </div>
+
+      <div className="grid min-w-0 gap-6 lg:grid-cols-12 lg:gap-8">
+        <ArticleContent
+          article={article}
+          isArticleAuthor={isArticleAuthor}
+          isAdmin={isAdmin}
+          authorId={authorId}
+          isBlocked={isBlocked}
+          onBlockClick={() => setShowBlockConfirm(true)}
+        />
+        <ArticleSidebar
+          relatedArticles={relatedArticles}
+          backLink={getBackLink()}
+        />
+      </div>
+
+      {/* Block Confirm Dialog */}
+      <Dialog open={showBlockConfirm} onOpenChange={setShowBlockConfirm}>
+        <DialogContent className="sm:max-w-100">
+          <DialogHeader>
+            <DialogTitle>Blokir Pengguna?</DialogTitle>
+            <DialogDescription>
+              Konten dari <span className="font-semibold text-gray-900">{article?.author?.name}</span> tidak akan ditampilkan lagi kepada Anda. Anda bisa membuka blokir kapan saja melalui menu Pengguna Diblokir.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowBlockConfirm(false)} disabled={isBlocking}>
+              Batal
+            </Button>
+            <Button
+              className="bg-red-500 hover:bg-red-600 text-white"
+              onClick={handleBlockUser}
+              disabled={isBlocking}
+            >
+              {isBlocking ? "Memblokir..." : "Ya, Blokir"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

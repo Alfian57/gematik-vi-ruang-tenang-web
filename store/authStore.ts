@@ -1,0 +1,196 @@
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import type { User } from "@/types";
+import { authService } from "@/services/api";
+import type { PhoneVerificationChallenge } from "@/services/api/auth";
+import Cookies from "js-cookie";
+import { STORAGE_KEYS } from "@/constants";
+import { env } from "@/config/env";
+
+type RegisterRole = "user";
+
+// Cookie configuration
+const COOKIE_OPTIONS = {
+  expires: 30, // 30 days (token validity controls actual session)
+  secure: env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+};
+
+// Custom storage using cookies for persistence
+const cookieStorage = {
+  getItem: (name: string): string | null => {
+    if (typeof window === "undefined") return null;
+    const value = Cookies.get(name);
+    return value ?? null;
+  },
+  setItem: (name: string, value: string): void => {
+    if (typeof window === "undefined") return;
+    Cookies.set(name, value, COOKIE_OPTIONS);
+  },
+  removeItem: (name: string): void => {
+    if (typeof window === "undefined") return;
+    Cookies.remove(name);
+  },
+};
+
+interface AuthState {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  isHydrated: boolean;
+  
+  // Actions
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<PhoneVerificationChallenge | null>;
+  verifyPhone: (challenge: string, code: string) => Promise<void>;
+  register: (
+    name: string,
+    email: string,
+    password: string,
+    passwordConfirmation: string,
+    whatsAppNumber: string,
+    role?: RegisterRole
+  ) => Promise<PhoneVerificationChallenge | null>;
+  logout: () => void;
+  refreshUser: () => Promise<void>;
+  setUser: (user: User | null) => void;
+  setLoading: (loading: boolean) => void;
+  setHydrated: (hydrated: boolean) => void;
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isHydrated: false,
+
+      login: async (email: string, password: string, rememberMe?: boolean) => {
+        set({ isLoading: true });
+        try {
+          const response = await authService.login(email, password, rememberMe);
+          if (!("token" in response.data)) {
+            set({ isLoading: false });
+            return { verification_token: response.data.verification_token, phone_required: response.data.phone_required };
+          }
+          const { token, user } = response.data;
+          
+          set({
+            user,
+            token,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+          return null;
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      verifyPhone: async (challenge: string, code: string) => {
+        set({ isLoading: true });
+        try {
+          const response = await authService.verifyPhone(challenge, code);
+          set({ user: response.data.user, token: response.data.token, isAuthenticated: true, isLoading: false });
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      register: async (
+        name: string,
+        email: string,
+        password: string,
+        passwordConfirmation: string,
+        whatsAppNumber: string,
+        role: RegisterRole = "user"
+      ) => {
+        set({ isLoading: true });
+        try {
+          await authService.register(name, email, password, passwordConfirmation, whatsAppNumber, role);
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+
+        try {
+          return await get().login(email, password);
+        } catch (loginError) {
+          set({ isLoading: false });
+          throw loginError;
+        }
+      },
+
+      logout: () => {
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+        });
+        // Also clear the cookie explicitly
+        Cookies.remove(STORAGE_KEYS.AUTH);
+      },
+
+      refreshUser: async () => {
+        const { token } = get();
+        if (!token) return;
+
+        try {
+          const response = await authService.getProfile(token);
+          set({ user: response.data });
+        } catch {
+          // Token expired or invalid - silently logout
+          get().logout();
+        }
+      },
+
+      setUser: (user: User | null) => {
+        set({ user });
+      },
+
+      setLoading: (loading: boolean) => {
+        set({ isLoading: loading });
+      },
+
+      setHydrated: (hydrated: boolean) => {
+        set({ isHydrated: hydrated });
+      },
+    }),
+    {
+      name: STORAGE_KEYS.AUTH,
+      storage: createJSONStorage(() => cookieStorage),
+      partialize: (state) => ({
+        user: state.user,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+      }),
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          // Silently handle rehydration errors - state will be reset
+        }
+        // Always mark as hydrated, even if there's no stored state
+        if (state) {
+          state.setHydrated(true);
+        }
+      },
+    }
+  )
+);
+
+// Initialize hydration immediately on client side
+if (typeof window !== "undefined") {
+  // Force hydration check after a small delay to ensure cookie is read
+  setTimeout(() => {
+    const state = useAuthStore.getState();
+    if (!state.isHydrated) {
+      state.setHydrated(true);
+    }
+  }, 100);
+}
+
+// Hook to check if store is hydrated (for SSR)
+export const useIsHydrated = () => useAuthStore((state) => state.isHydrated);

@@ -1,0 +1,263 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useParams } from "next/navigation";
+import { storyService } from "@/services/api";
+import { Navbar, Footer } from "@/components/layout";
+import { PublicPageHero } from "../../_components/PublicPageHero";
+import { useAuthStore } from "@/store/authStore";
+import { StoryDetail, StoryCommentsList, StoryCommentInput } from "@/components/shared/stories";
+import { InspiringStory, StoryComment } from "@/types";
+import { LogIn, MessageCircle } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { ROUTES } from "@/lib/routes";
+
+export default function StoryDetailPage() {
+    const params = useParams();
+    const id = params.id as string;
+    const { token, user } = useAuthStore();
+
+    const [story, setStory] = useState<InspiringStory | null>(null);
+    const [comments, setComments] = useState<StoryComment[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [commentLoading, setCommentLoading] = useState(false);
+    const [heartLoading, setHeartLoading] = useState(false);
+    const [commentPage, setCommentPage] = useState(1);
+    const [totalCommentPages, setTotalCommentPages] = useState(1);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchStory = useCallback(async () => {
+        try {
+            const response = await storyService.getStory(id, token || undefined);
+            setStory(response.data);
+        } catch {
+            setError("Cerita tidak ditemukan");
+        }
+    }, [id, token]);
+
+    const fetchComments = useCallback(async (page: number = 1) => {
+        try {
+            const response = await storyService.getComments(id, { page, limit: 20 }, token || undefined);
+            setComments(response.data?.comments || []);
+            setTotalCommentPages(response.data?.total_pages || response.meta?.total_pages || 1);
+            setCommentPage(page);
+        } catch {
+            // silently ignore
+        }
+    }, [id, token]);
+
+    useEffect(() => {
+        const loadData = async () => {
+            setLoading(true);
+            await fetchStory();
+            await fetchComments();
+            setLoading(false);
+        };
+        loadData();
+    }, [fetchStory, fetchComments]);
+
+    const handleHeart = async () => {
+        if (!token || !story) return;
+
+        setHeartLoading(true);
+        try {
+            if (story.has_hearted) {
+                await storyService.heart(token, id);
+                setStory({
+                    ...story,
+                    has_hearted: false,
+                    heart_count: story.heart_count - 1,
+                });
+            } else {
+                await storyService.heart(token, id);
+                setStory({
+                    ...story,
+                    has_hearted: true,
+                    heart_count: story.heart_count + 1,
+                });
+            }
+        } catch {
+            // silently ignore
+        } finally {
+            setHeartLoading(false);
+        }
+    };
+
+    const handleCommentHeart = async (commentId: string) => {
+        if (!token) return;
+
+        try {
+            const comment = comments.find(c => c.id === commentId);
+            if (!comment) return;
+
+            if (comment.has_hearted) {
+                await storyService.heartComment(token, id, commentId);
+            } else {
+                await storyService.heartComment(token, id, commentId);
+            }
+
+            setComments(comments.map(c => {
+                if (c.id === commentId) {
+                    return {
+                        ...c,
+                        has_hearted: !c.has_hearted,
+                        heart_count: c.has_hearted ? c.heart_count - 1 : c.heart_count + 1,
+                    };
+                }
+                return c;
+            }));
+        } catch {
+            // silently ignore
+        }
+    };
+
+    const handleSubmitComment = async (content: string) => {
+        if (!token) return;
+
+        setCommentLoading(true);
+        try {
+            const response = await storyService.createComment(token, id, { content });
+            setComments([response.data, ...comments]);
+            if (story) {
+                setStory({
+                    ...story,
+                    comment_count: story.comment_count + 1,
+                });
+            }
+        } catch {
+            // silently ignore
+        } finally {
+            setCommentLoading(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="public-page">
+                <Navbar variant="back" />
+                <div className="container mx-auto px-4 pt-32 pb-20">
+                    <div className="max-w-3xl mx-auto space-y-6">
+                        {/* Author skeleton */}
+                        <div className="flex items-center gap-3">
+                            <div className="h-12 w-12 rounded-full bg-gray-200 animate-pulse" />
+                            <div className="space-y-2">
+                                <div className="h-4 w-24 rounded bg-gray-200 animate-pulse" />
+                                <div className="h-3 w-16 rounded bg-gray-200 animate-pulse" />
+                            </div>
+                        </div>
+                        {/* Title skeleton */}
+                        <div className="h-8 w-3/4 rounded bg-gray-200 animate-pulse" />
+                        {/* Content skeleton */}
+                        <div className="space-y-3">
+                            <div className="h-4 w-full rounded bg-gray-200 animate-pulse" />
+                            <div className="h-4 w-full rounded bg-gray-200 animate-pulse" />
+                            <div className="h-4 w-5/6 rounded bg-gray-200 animate-pulse" />
+                            <div className="h-4 w-full rounded bg-gray-200 animate-pulse" />
+                            <div className="h-4 w-2/3 rounded bg-gray-200 animate-pulse" />
+                        </div>
+                        {/* Actions skeleton */}
+                        <div className="flex gap-4 pt-4">
+                            <div className="h-8 w-20 rounded-full bg-gray-200 animate-pulse" />
+                            <div className="h-8 w-20 rounded-full bg-gray-200 animate-pulse" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (error || !story) {
+        return (
+            <div className="public-page">
+                <Navbar variant="back" />
+                <div className="container mx-auto px-4 py-32 text-center sm:py-40">
+                    <PublicPageHero compact eyebrow="Cerita komunitas" title={<>Cerita belum <span>ditemukan</span></>} description="Mungkin kisah ini sudah tidak tersedia. Masih ada banyak cerita lain yang bisa kamu baca." pose="listen" />
+                    <p className="text-muted-foreground mb-6">{error || "Cerita yang kamu cari tidak ada."}</p>
+                    <Link href={ROUTES.PUBLIC_STORIES}>
+                        <Button>Kembali ke Daftar Cerita</Button>
+                    </Link>
+                </div>
+                <Footer variant="landing" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="public-page">
+            <Navbar variant="back" />
+
+            <main className="container mx-auto px-4 pt-28 pb-16 sm:pt-32 sm:pb-20">
+                <PublicPageHero compact headingLevel={2} eyebrow="Cerita komunitas" title={<>Setiap cerita <span>berarti</span></>} description="Luangkan waktu untuk mendengarkan, lalu bagikan dukungan dengan sepenuh hati." pose="listen" />
+                {/* Story Content */}
+                <StoryDetail
+                    story={story}
+                    onHeart={token ? handleHeart : undefined}
+                    isHeartLoading={heartLoading}
+                    currentUserId={user?.id}
+                    canModerate={Boolean(token)}
+                />
+
+                {/* Comments Section */}
+                <section className="mx-auto mt-10 max-w-3xl sm:mt-12">
+                    <h2 className="mb-5 flex items-center gap-2 text-lg font-semibold sm:mb-6 sm:text-xl">
+                        <MessageCircle className="h-5 w-5" />
+                        Dukungan & Komentar ({story.comment_count})
+                    </h2>
+
+                    {token && (
+                        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                            Jika menemukan konten berisiko, gunakan menu aksi untuk lapor atau blokir. Tim moderasi meninjau laporan maksimal 1 x 24 jam.
+                        </div>
+                    )}
+
+                    {/* Comment Input */}
+                    {token ? (
+                        <div className="mb-8">
+                            <StoryCommentInput
+                                onSubmit={handleSubmitComment}
+                                isLoading={commentLoading}
+                                placeholder="Berikan dukungan atau komentar positif..."
+                            />
+                        </div>
+                    ) : (
+                        <div className="bg-muted/50 rounded-lg p-4 mb-8 text-center">
+                            <p className="text-muted-foreground mb-3">
+                                Masuk untuk memberikan dukungan
+                            </p>
+                            <Link href={ROUTES.LOGIN}>
+                                <Button size="sm">
+                                    <LogIn className="h-4 w-4 mr-2" />
+                                    Masuk
+                                </Button>
+                            </Link>
+                        </div>
+                    )}
+
+                    {/* Comments List */}
+                    <StoryCommentsList
+                        comments={comments}
+                        onHeartComment={token ? handleCommentHeart : undefined}
+                        isAdmin={user?.role === "admin"}
+                        currentUserId={user?.id}
+                        canModerate={Boolean(token)}
+                    />
+
+                    {/* Load More Comments */}
+                    {totalCommentPages > 1 && commentPage < totalCommentPages && (
+                        <div className="text-center mt-6">
+                            <Button
+                                variant="outline"
+                                onClick={() => fetchComments(commentPage + 1)}
+                            >
+                                Muat Lebih Banyak
+                            </Button>
+                        </div>
+                    )}
+                </section>
+            </main>
+
+            <Footer variant="landing" />
+        </div>
+    );
+}

@@ -1,0 +1,294 @@
+"use client";
+
+import { cn } from "@/utils";
+import { sanitizeHtml } from "@/utils/sanitize";
+import { InspiringStory } from "@/types";
+import {
+    Heart,
+    MessageCircle,
+    Share2,
+    MoreVertical,
+    Flag,
+    AlertTriangle,
+    BadgeCheck,
+    Eye,
+    Calendar,
+    User,
+    ArrowLeft
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { useState } from "react";
+import { ROUTES } from "@/lib/routes";
+import { ReportModal, BlockUserButton } from "@/components/shared/moderation";
+import { StoryCategoryIcon } from "./StoryCategoryIcon";
+import { getUploadUrl } from "@/services/http/upload-url";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+interface StoryDetailProps {
+    story: InspiringStory;
+    onHeart?: () => void;
+    isHeartLoading?: boolean;
+    currentUserId?: number;
+    canModerate?: boolean;
+    className?: string;
+}
+
+export function StoryDetail({
+    story,
+    onHeart,
+    isHeartLoading,
+    currentUserId,
+    canModerate = false,
+    className
+}: StoryDetailProps) {
+    const [showContent, setShowContent] = useState(!story.has_trigger_warning);
+    const [moderationFeedback, setModerationFeedback] = useState<string | null>(null);
+
+    const canShowModerationMenu =
+        canModerate &&
+        !!story.author?.id &&
+        story.author.id !== currentUserId;
+
+    const formatDate = (dateStr: string) => {
+        return new Date(dateStr).toLocaleDateString("id-ID", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+        });
+    };
+
+    return (
+        <article className={cn("max-w-3xl mx-auto", className)}>
+            {/* Back Link */}
+            <Link
+                href={ROUTES.PUBLIC_STORIES}
+                className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
+            >
+                <ArrowLeft className="h-4 w-4" />
+                Kembali ke Cerita
+            </Link>
+
+            {/* Cover Image */}
+            {story.cover_image && (
+                <div className="relative h-64 md:h-80 rounded-xl overflow-hidden mb-6">
+                    <Image
+                        src={story.cover_image.startsWith("http") ? story.cover_image : getUploadUrl(story.cover_image)}
+                        alt={story.title}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" />
+                    {story.is_featured && (
+                        <div className="absolute top-4 left-4 bg-yellow-500 text-white text-sm font-medium px-3 py-1 rounded-full flex items-center gap-1">
+                            <BadgeCheck className="h-4 w-4" />
+                            Cerita Pilihan
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Header */}
+            <header className="mb-8">
+                {/* Categories */}
+                {story.categories.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {story.categories.map((cat) => (
+                            <span
+                                key={cat.id}
+                                className="text-sm bg-primary/10 text-primary px-3 py-1 rounded-full"
+                            >
+                                <StoryCategoryIcon slug={cat.slug} name={cat.name} className="h-4 w-4" />
+                                {cat.name}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                {/* Title */}
+                <h1 className="mb-4 break-words text-2xl font-bold leading-tight sm:text-3xl md:text-4xl">{story.title}</h1>
+
+                {/* Meta */}
+                <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                    {/* Author */}
+                    {story.is_anonymous || !story.author ? (
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center">
+                                <User className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <span>Anonim</span>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <Image
+                                src={story.author.avatar ? (story.author.avatar.startsWith("http") ? story.author.avatar : getUploadUrl(story.author.avatar)) : "/images/default-avatar.png"}
+                                alt={story.author.name}
+                                width={32}
+                                height={32}
+                                className="rounded-full"
+                                style={story.author.tier_color ? {
+                                    borderWidth: 2,
+                                    borderColor: story.author.tier_color
+                                } : undefined}
+                            />
+                            <div>
+                                <span className="font-medium text-foreground">{story.author.name}</span>
+                                {story.author.tier_name && (
+                                    <span
+                                        className="ml-2 text-xs"
+                                        style={{ color: story.author.tier_color }}
+                                    >
+                                        {story.author.tier_name}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    <span className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4" />
+                        {formatDate(story.published_at || story.created_at)}
+                    </span>
+
+                    <span className="flex items-center gap-1">
+                        <Eye className="h-4 w-4" />
+                        {story.view_count} views
+                    </span>
+                </div>
+
+                {/* Tags */}
+                {story.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-4">
+                        {story.tags.map((tag, i) => (
+                            <span
+                                key={i}
+                                className="text-xs bg-muted px-2 py-1 rounded-full text-muted-foreground"
+                            >
+                                #{tag}
+                            </span>
+                        ))}
+                    </div>
+                )}
+            </header>
+
+            {/* Trigger Warning */}
+            {story.has_trigger_warning && !showContent && (
+                <div className="rounded-xl p-6 mb-8 border" style={{ backgroundColor: `var(--theme-accent-soft)`, borderColor: `var(--theme-accent-border)` }}>
+                    <div className="flex items-center gap-2 mb-4 theme-accent-text">
+                        <AlertTriangle className="h-5 w-5" />
+                        <span className="font-semibold">Peringatan Konten</span>
+                    </div>
+                    <p className="mb-4 theme-accent-text-dark">
+                        {story.trigger_warning_text || "Cerita ini mungkin mengandung konten yang sensitif."}
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => setShowContent(true)}
+                        className="text-white px-4 py-2 rounded-lg transition-colors theme-accent-bg theme-accent-bg-hover"
+                        style={{ backgroundColor: `var(--theme-accent)` }}
+                    >
+                        Saya Mengerti, Tampilkan Cerita
+                    </button>
+                </div>
+            )}
+
+            {/* Content */}
+            {showContent && (
+                <div
+                    className="prose prose-sm mb-8 max-w-none break-words prose-pre:overflow-x-auto sm:prose-lg"
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(story.content) }}
+                />
+            )}
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center gap-3 border-t border-b py-5 sm:gap-4 sm:py-6">
+                <button
+                    type="button"
+                    onClick={onHeart}
+                    disabled={isHeartLoading}
+                    className={cn(
+                        "flex items-center gap-2 px-4 py-2 rounded-full transition-colors",
+                        story.has_hearted
+                            ? "bg-red-50 text-red-500"
+                            : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                    )}
+                >
+                    <Heart className={cn("h-5 w-5", story.has_hearted && "fill-current")} />
+                    <span>{story.heart_count}</span>
+                </button>
+
+                <div className="flex items-center gap-2 text-muted-foreground">
+                    <MessageCircle className="h-5 w-5" />
+                    <span>{story.comment_count} komentar</span>
+                </div>
+
+                <button
+                    type="button"
+                    className="flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground sm:ml-auto"
+                    onClick={async () => {
+                        const shareUrl = window.location.href;
+
+                        try {
+                            if (navigator.share) {
+                                await navigator.share({
+                                    title: story.title,
+                                    url: shareUrl,
+                                });
+                                return;
+                            }
+
+                            if (navigator.clipboard?.writeText) {
+                                await navigator.clipboard.writeText(shareUrl);
+                            }
+                        } catch {
+                            // Ignore share cancellation or clipboard permission denial.
+                        }
+                    }}
+                >
+                    <Share2 className="h-5 w-5" />
+                    Bagikan
+                </button>
+
+                {canShowModerationMenu && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button type="button" className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors">
+                                <MoreVertical className="h-5 w-5" />
+                                Aksi
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <ReportModal
+                                type="story"
+                                contentId={story.id}
+                                userId={story.author?.id}
+                                onSuccess={() => setModerationFeedback("Laporanmu masuk antrean review. Tim moderasi akan menindaklanjuti dalam 1 x 24 jam.")}
+                                trigger={
+                                    <button type="button" className="relative flex w-full select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 cursor-pointer">
+                                        <Flag className="w-4 h-4 mr-2" />
+                                        Laporkan Kisah
+                                    </button>
+                                }
+                            />
+                            <BlockUserButton
+                                userId={story.author?.id || 0}
+                                userName={story.author?.name || "User"}
+                                onSuccess={() => setModerationFeedback("Pengguna berhasil diblokir. Konten dari akun ini tidak akan kamu lihat lagi.")}
+                                className="w-full justify-start text-sm font-normal px-2 py-1.5 h-auto text-red-600 hover:text-red-600 hover:bg-red-50"
+                            />
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+            </div>
+
+            {moderationFeedback && (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                    {moderationFeedback}
+                </div>
+            )}
+        </article>
+    );
+}

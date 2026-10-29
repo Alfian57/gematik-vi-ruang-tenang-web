@@ -1,0 +1,83 @@
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Pagination } from "@/components/ui/pagination";
+import { CheckCircle2 } from "lucide-react";
+import { UserReport } from "@/types/moderation";
+import { ModerationReportItem } from "./ModerationReportItem";
+
+interface ModerationReportsListProps {
+    reports: UserReport[];
+    isLoading: boolean;
+    searchQuery: string;
+    totalPages: number;
+    page: number;
+    focusId?: string;
+    setPage: (page: number) => void;
+}
+
+export function ModerationReportsList({
+    reports,
+    isLoading,
+    searchQuery,
+    totalPages,
+    page,
+    focusId,
+    setPage,
+}: ModerationReportsListProps) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Laporan ({reports.length})</CardTitle>
+                <CardDescription>
+                    Klik pada laporan untuk melihat detail dan mengambil tindakan
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                {isLoading ? (
+                    <div className="space-y-4">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                            <div
+                                key={i}
+                                className="animate-pulse flex items-center gap-4 p-4 border rounded-lg"
+                            >
+                                <div className="h-10 w-10 bg-muted rounded-full" />
+                                <div className="flex-1 space-y-2">
+                                    <div className="h-5 bg-muted rounded w-1/2" />
+                                    <div className="h-4 bg-muted rounded w-1/3" />
+                                </div>
+                                <div className="h-8 w-20 bg-muted rounded" />
+                            </div>
+                        ))}
+                    </div>
+                ) : reports.length === 0 ? (
+                    <div className="text-center py-16">
+                        <CheckCircle2 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-gray-500">Tidak ada laporan</h3>
+                        <p className="text-gray-400 text-sm mt-1">
+                            {searchQuery
+                                ? "Tidak ada laporan yang cocok dengan pencarian"
+                                : "Tidak ada laporan yang menunggu penanganan"}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {reports.map((report) => (
+                            <ModerationReportItem key={report.id} report={report} isFocused={focusId === String(report.id)} />
+                        ))}
+                    </div>
+                )}
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex justify-center mt-6">
+                        <Pagination
+                            currentPage={page}
+                            totalPages={totalPages}
+                            onPageChange={setPage}
+                            disabled={isLoading}
+                        />
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}

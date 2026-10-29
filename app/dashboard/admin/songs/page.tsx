@@ -1,0 +1,226 @@
+"use client";
+
+import { Plus, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useAdminSongs } from "./_hooks/useAdminSongs";
+import { AdminCompactTabs } from "../_components/AdminCompactTabs";
+import { AdminMascotHero } from "@/components/shared/dashboard/AdminMascotHero";
+import {
+  CategoryTable,
+  SongTable,
+  CategoryFormModal,
+  SongFormModal,
+  CategoryDeleteModal,
+  CategoryCannotDeleteModal,
+  SongDeleteModal,
+  ErrorDialog
+} from "./_components";
+import { Pagination } from "@/components/ui/pagination";
+
+export default function AdminSongsPage() {
+  const {
+    user,
+    token,
+    activeTab,
+    searchSong,
+    searchCategory,
+    selectedCategoryId,
+    categories,
+    songs,
+    categoryDialog,
+    songDialog,
+    categoryForm,
+    songForm,
+    isUploadingAudio,
+    deleteCategoryId,
+    deleteSongId,
+    editingCategory,
+    editingSong,
+    cannotDeleteDialog,
+    errorDialog,
+    audioInputRef,
+    setSearchSong,
+    setSearchCategory,
+    setSelectedCategoryId,
+    setActiveTab,
+    setCategoryDialog,
+    setSongDialog,
+    setCategoryForm,
+    setSongForm,
+    setDeleteCategoryId,
+    setDeleteSongId,
+    setCannotDeleteDialog,
+    setErrorDialog,
+    openCategoryDialog,
+    saveCategory,
+    handleDeleteCategory,
+    handleAudioUpload,
+    saveSong,
+    openSongDialog,
+    handleDeleteSong,
+    page,
+    totalPages,
+    setPage
+  } = useAdminSongs();
+
+  if (user?.role !== "admin") {
+    return <div className="py-8 text-center">Akses ditolak</div>;
+  }
+
+  const filteredSongs = songs.filter(s =>
+    s.title.toLowerCase().includes(searchSong.toLowerCase())
+  );
+
+  const filteredCategories = categories.filter(c =>
+    c.name.toLowerCase().includes(searchCategory.toLowerCase())
+  );
+
+  return (
+    <div className="py-2 lg:py-4">
+      <AdminMascotHero
+        eyebrow="Audio & Relaksasi"
+        title="Kelola Musik & Kategori Audio"
+        description="Atur pustaka musik relaksasi, frekuensi ambient, dan kategori audio penenang pikiran."
+        image="/images/dashboard/mascot/music-headphones.webp"
+        imageAlt="Maskot RuNa mendengarkan musik"
+      />
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <AdminCompactTabs
+          items={[
+            { value: "songs", label: "Lagu" },
+            { value: "categories", label: "Kategori" },
+          ]}
+        />
+
+        {/* Categories Tab */}
+        <TabsContent value="categories" className="space-y-6">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
+              <Input
+                placeholder="Cari kategori..."
+                value={searchCategory}
+                onChange={(e) => setSearchCategory(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Button onClick={() => openCategoryDialog()} className="gradient-primary">
+              <Plus className="w-4 h-4 mr-2" /> Tambah Kategori
+            </Button>
+          </div>
+
+          <CategoryTable
+            categories={filteredCategories}
+            search={searchCategory}
+            onEdit={openCategoryDialog}
+            onDelete={(cat) => {
+              if ((cat.song_count || 0) > 0) {
+                setCannotDeleteDialog(true);
+              } else {
+                setDeleteCategoryId(cat.id);
+              }
+            }}
+          />
+        </TabsContent>
+
+        {/* Songs Tab */}
+        <TabsContent value="songs" className="space-y-6">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <div className="flex flex-col sm:flex-row gap-4 flex-1">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
+                <Input
+                  placeholder="Cari lagu..."
+                  value={searchSong}
+                  onChange={(e) => setSearchSong(e.target.value)}
+                  className="pl-10 bg-white"
+                />
+              </div>
+              <select
+                className="admin-select"
+                value={selectedCategoryId}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSelectedCategoryId(value === "all" ? "all" : Number(value));
+                }}
+              >
+                <option value="all">Semua Kategori</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            <Button onClick={() => openSongDialog()} className="gradient-primary">
+              <Plus className="w-4 h-4 mr-2" /> Tambah Lagu
+            </Button>
+          </div>
+
+          <SongTable
+            songs={filteredSongs}
+            search={searchSong}
+            onEdit={openSongDialog}
+            onDelete={setDeleteSongId}
+          />
+
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
+        </TabsContent>
+      </Tabs>
+
+      {/* Modals */}
+      <CategoryFormModal
+        isOpen={categoryDialog}
+        onClose={() => setCategoryDialog(false)}
+        isEditing={!!editingCategory}
+        formData={categoryForm}
+        setFormData={setCategoryForm}
+        token={token}
+        onSave={saveCategory}
+      />
+
+      <SongFormModal
+        isOpen={songDialog}
+        onClose={() => setSongDialog(false)}
+        isEditing={!!editingSong}
+        formData={songForm}
+        setFormData={setSongForm}
+        categories={categories}
+        token={token}
+        isUploadingAudio={isUploadingAudio}
+        audioInputRef={audioInputRef}
+        handleAudioUpload={handleAudioUpload}
+        onSave={saveSong}
+      />
+
+      <CategoryDeleteModal
+        isOpen={deleteCategoryId !== null}
+        onClose={() => setDeleteCategoryId(null)}
+        onConfirm={handleDeleteCategory}
+      />
+
+      <CategoryCannotDeleteModal
+        isOpen={cannotDeleteDialog}
+        onClose={() => setCannotDeleteDialog(false)}
+      />
+
+      <SongDeleteModal
+        isOpen={deleteSongId !== null}
+        onClose={() => setDeleteSongId(null)}
+        onConfirm={handleDeleteSong}
+      />
+
+      <ErrorDialog
+        isOpen={errorDialog.open}
+        title={errorDialog.title}
+        message={errorDialog.message}
+        onClose={() => setErrorDialog(prev => ({ ...prev, open: false }))}
+      />
+    </div>
+  );
+}

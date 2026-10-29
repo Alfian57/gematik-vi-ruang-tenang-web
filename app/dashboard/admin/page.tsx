@@ -1,0 +1,252 @@
+"use client";
+
+import Link from "next/link";
+import { ROUTES } from "@/lib/routes";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Users,
+  FileText,
+  Music,
+  Heart,
+  Ban,
+  FolderOpen,
+  ChevronRight,
+  AlertTriangle
+} from "lucide-react";
+import { formatDate } from "@/utils";
+import { AdminStatsCards } from "../_components/admin/AdminStatsCards";
+import { AdminMascotHero } from "@/components/shared/dashboard/AdminMascotHero";
+import { useAdminStats } from "./_hooks/useAdminStats";
+
+export default function AdminDashboardPage() {
+  const { stats, isLoading, user } = useAdminStats();
+  const adminDisplayName = user?.name?.trim() || "Admin";
+
+  if (user?.role !== "admin") {
+    return (
+      <div className="py-8 text-center">
+        <h1 className="text-2xl font-bold text-destructive">Akses Ditolak</h1>
+        <p className="text-muted-foreground">Anda tidak memiliki akses ke halaman ini.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="py-2 lg:py-4">
+      {/* Hero Banner */}
+      <AdminMascotHero
+        eyebrow="Pusat Kontrol Sistem"
+        title={`Selamat Datang, ${adminDisplayName}!`}
+        description="Pantau performa platform, kelola pengguna, moderasi konten, dan jaga keamanan ekosistem Ruang Tenang."
+        image="/images/landing/mascot/welcome.webp"
+        imageAlt="Maskot RuNa menyambut Administrator"
+      />
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} className="rounded-xl">
+              <CardContent className="p-3.5 sm:p-4">
+                <div className="h-14 bg-muted animate-pulse rounded-lg" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : stats && (
+        <>
+          {/* Alert Cards - Only show if there are issues */}
+          {(stats.users.blocked > 0 || stats.articles.blocked > 0) && (
+            <div className="mb-6 grid sm:grid-cols-2 gap-4">
+              {stats.users.blocked > 0 && (
+                <Card className="border-primary/20 bg-primary/10">
+                  <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Ban className="w-5 h-5 text-primary/80" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-primary">{stats.users.blocked} Pengguna Diblokir</p>
+                        <p className="text-sm text-primary/80">Memerlukan perhatian</p>
+                      </div>
+                    </div>
+                    <Link href={ROUTES.ADMIN.USERS}>
+                      <Button variant="outline" size="sm" className="border-primary/40 text-primary hover:bg-primary/10">
+                        Lihat <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              )}
+              {stats.articles.blocked > 0 && (
+                <Card className="border-red-200 bg-red-50">
+                  <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                        <AlertTriangle className="w-5 h-5 text-red-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-red-800">{stats.articles.blocked} Artikel Diblokir</p>
+                        <p className="text-sm text-red-600">Perlu ditinjau</p>
+                      </div>
+                    </div>
+                    <Link href={ROUTES.ADMIN.ARTICLES}>
+                      <Button variant="outline" size="sm" className="border-red-300 text-red-700 hover:bg-red-100">
+                        Lihat <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* Stats Cards */}
+          <AdminStatsCards stats={stats} />
+
+          {/* Second Row */}
+          <div className="grid lg:grid-cols-3 gap-6 mb-8">
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle>Pengguna Terbaru</CardTitle>
+                <CardDescription>5 pengguna terdaftar terbaru</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {stats.recent_users.map((recentUser) => (
+                    <div key={recentUser.id} className={`flex items-center justify-between p-3 rounded-lg ${recentUser.is_blocked ? 'bg-red-50 border border-red-100' : 'bg-muted/50'
+                      }`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${recentUser.is_blocked ? 'bg-red-100' : 'bg-primary/10'
+                          }`}>
+                          <span className={recentUser.is_blocked ? 'text-red-600 font-semibold' : 'text-primary font-semibold'}>
+                            {recentUser.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{recentUser.name}</p>
+                            {recentUser.is_blocked && (
+                              <span className="px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-600">Diblokir</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground">{recentUser.email}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className={`px-2 py-1 rounded-full text-xs ${recentUser.role === 'admin' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                          }`}>
+                          {recentUser.role}
+                        </span>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formatDate(recentUser.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Link href={ROUTES.ADMIN.USERS}>
+                  <Button variant="outline" className="w-full mt-4">
+                    Lihat Semua Pengguna <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Aksi Cepat</CardTitle>
+                <CardDescription>Kelola konten platform</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Link href={ROUTES.ADMIN.USERS} className="block">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <Users className="w-5 h-5 text-primary" />
+                      <span>Kelola Pengguna</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                </Link>
+                <Link href={ROUTES.ADMIN.ARTICLES} className="block">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-5 h-5 text-primary/80" />
+                      <span>Kelola Artikel</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                </Link>
+                <Link href={ROUTES.ADMIN.SONGS} className="block">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <Music className="w-5 h-5 text-primary/80" />
+                      <span>Kelola Musik</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Third Row - Summary */}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Users className="w-5 h-5 text-primary/80" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Pengguna Aktif</p>
+                    <p className="font-semibold">{stats.users.active}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <FolderOpen className="w-5 h-5 text-primary/80" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Kategori Artikel</p>
+                    <p className="font-semibold">{stats.articles.categories}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Music className="w-5 h-5 text-primary/80" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Musik</p>
+                    <p className="font-semibold">{stats.songs.total} lagu</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Heart className="w-5 h-5 text-primary/80" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Mood Hari Ini</p>
+                    <p className="font-semibold">{stats.moods.today}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

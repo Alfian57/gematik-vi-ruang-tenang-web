@@ -1,0 +1,225 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { ROUTES } from "@/lib/routes";
+import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Loader2, Mail, Lock, User, Phone } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useAuthStore } from "@/store/authStore";
+import { AuthIllustration, AuthMascotMini } from "@/components/shared/auth/AuthIllustration";
+import { buildPathWithRedirect, getSafeRedirect } from "@/lib/safe-redirect";
+import { toast } from "sonner";
+
+const registerSchema = z.object({
+  name: z.string().min(2, "Nama minimal 2 karakter").max(100, "Nama terlalu panjang"),
+  email: z.string().email("Email tidak valid"),
+  whatsAppNumber: z.string().regex(/^(?:\+62|62|0)8\d{8,13}$/, "Nomor WhatsApp Indonesia tidak valid"),
+  password: z.string()
+    .min(8, "Password minimal 8 karakter")
+    .max(128, "Password terlalu panjang")
+    .regex(/[A-Z]/, "Password harus mengandung huruf besar")
+    .regex(/[a-z]/, "Password harus mengandung huruf kecil")
+    .regex(/[0-9]/, "Password harus mengandung angka"),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Password tidak cocok",
+  path: ["confirmPassword"],
+});
+
+type RegisterFormData = z.infer<typeof registerSchema>;
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { register: registerUser, isLoading } = useAuthStore();
+  const [error, setError] = useState<string | null>(null);
+  const redirectTarget = getSafeRedirect(searchParams.get("redirect"), "");
+  const loginHref = buildPathWithRedirect(ROUTES.LOGIN, redirectTarget);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<RegisterFormData>({ resolver: zodResolver(registerSchema) });
+
+  const onSubmit = async (data: RegisterFormData) => {
+    setError(null);
+    try {
+      const challenge = await registerUser(
+        data.name,
+        data.email,
+        data.password,
+        data.confirmPassword,
+        data.whatsAppNumber
+      );
+      if (challenge) {
+        sessionStorage.setItem("phone-verification", JSON.stringify(challenge));
+        const destination = redirectTarget || ROUTES.DASHBOARD;
+        sessionStorage.setItem("phone-verification-redirect", destination);
+        toast.success("Registrasi berhasil! Silakan masukkan kode OTP WhatsApp.");
+        router.push(ROUTES.VERIFY_PHONE);
+        return;
+      }
+      sessionStorage.removeItem("phone-verification");
+      sessionStorage.removeItem("phone-verification-redirect");
+      router.push(redirectTarget || ROUTES.DASHBOARD);
+    } catch (error) {
+      const err = error as Error;
+      setError(err.message || "Registrasi gagal. Silakan coba lagi.");
+    }
+  };
+
+  return (
+    <div className="auth-page flex">
+      {/* Left Side - Register Form */}
+      <div className="auth-form-panel w-full lg:w-1/2 flex items-center justify-center p-8">
+        <div className="auth-form-content w-full max-w-md">
+          {/* Logo */}
+          <div className="text-center mb-8">
+            <Link href={ROUTES.HOME} className="inline-block mb-6">
+              <Image
+                src="/logo-full.webp"
+                alt="Ruang Tenang"
+                width={180}
+                height={60}
+                className="object-contain"
+                style={{ width: "auto", height: "auto" }}
+              />
+            </Link>
+            <AuthMascotMini pose="heart" />
+            <h1 className="mb-2 text-3xl font-bold">Mulai dari sini</h1>
+            <p className="text-gray-500">Buat akun baru untuk memulai</p>
+          </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            {error && (
+              <div className="p-4 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">
+                {error}
+              </div>
+            )}
+
+            {/* Name Field */}
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-gray-700 font-medium">Nama Lengkap</Label>
+              <div className="relative">
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Nama lengkapmu"
+                  className="pl-12 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary"
+                  {...register("name")}
+                />
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              </div>
+              {errors.name && (
+                <p className="text-sm text-red-500">{errors.name.message}</p>
+              )}
+            </div>
+
+            {/* Email Field */}
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-gray-700 font-medium">Email</Label>
+              <div className="relative">
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="nama@email.com"
+                  className="pl-12 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary"
+                  {...register("email")}
+                />
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              </div>
+              {errors.email && (
+                <p className="text-sm text-red-500">{errors.email.message}</p>
+              )}
+            </div>
+
+            {/* Password Field */}
+            <div className="space-y-2">
+              <Label htmlFor="whatsAppNumber" className="text-gray-700 font-medium">Nomor WhatsApp</Label>
+              <div className="relative">
+                <Input id="whatsAppNumber" type="tel" autoComplete="tel" placeholder="081234567890" className="pl-12 h-12 rounded-xl border-gray-200" {...register("whatsAppNumber")} />
+                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              </div>
+              {errors.whatsAppNumber && <p className="text-sm text-red-500">{errors.whatsAppNumber.message}</p>}
+            </div>
+
+            {/* Password Field */}
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-gray-700 font-medium">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••••••"
+                  className="pl-12 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary"
+                  {...register("password")}
+                />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              </div>
+              {errors.password && (
+                <p className="text-sm text-red-500">{errors.password.message}</p>
+              )}
+            </div>
+
+            {/* Confirm Password Field */}
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword" className="text-gray-700 font-medium">Konfirmasi Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="••••••••••••"
+                  className="pl-12 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary"
+                  {...register("confirmPassword")}
+                />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              </div>
+              {errors.confirmPassword && (
+                <p className="text-sm text-red-500">{errors.confirmPassword.message}</p>
+              )}
+            </div>
+
+            {/* Submit Button */}
+            <Button
+              type="submit"
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-white rounded-xl text-base font-semibold"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  Memproses...
+                </>
+              ) : (
+                "Daftar"
+              )}
+            </Button>
+
+            {/* Login Link */}
+            <p className="text-center text-gray-600">
+              Sudah punya akun?{" "}
+              <Link href={loginHref} className="text-primary font-medium hover:underline">
+                Masuk
+              </Link>
+            </p>
+          </form>
+        </div>
+      </div>
+
+      {/* Right Side - Illustration */}
+      <AuthIllustration
+        title="Langkah kecil, ruang baru"
+        description="Buat akunmu dan mulai mengenali emosi, merawat rutinitas, serta menemukan dukungan yang terasa pas."
+        pose="heart"
+      />
+    </div>
+  );
+}

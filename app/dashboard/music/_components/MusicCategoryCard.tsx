@@ -1,0 +1,100 @@
+"use client";
+
+import { useState } from "react";
+import Image from "next/image";
+import { motion } from "framer-motion";
+import { Music, Play } from "lucide-react";
+import { SongCategory } from "@/types";
+import { cn } from "@/utils";
+
+interface MusicCategoryCardProps {
+  category: SongCategory;
+  onClick: () => void;
+  isExpanded?: boolean;
+  gradientFrom?: string;
+  gradientTo?: string;
+}
+
+const categoryGradients: Record<string, { from: string; to: string }> = {
+  relaksasi: { from: "from-primary/40", to: "to-primary" },
+  meditasi: { from: "from-primary/40", to: "to-primary" },
+  fokus: { from: "from-primary/40", to: "to-primary" },
+  tidur: { from: "from-primary/40", to: "to-primary" },
+  alam: { from: "from-primary/40", to: "to-primary" },
+  default: { from: "from-primary/40", to: "to-primary" },
+};
+
+export function MusicCategoryCard({
+  category,
+  onClick,
+  isExpanded,
+}: MusicCategoryCardProps) {
+  const [imageError, setImageError] = useState(false);
+
+  return (
+    <motion.button
+      type="button"
+      aria-label={`Jelajahi kategori ${category.name}`}
+      layout
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      className={cn(
+        "relative block w-full overflow-hidden rounded-2xl border border-white/70 text-left shadow-sm cursor-pointer group focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+        "aspect-[4/3] md:aspect-[3/2]",
+        isExpanded && "ring-2 ring-primary ring-offset-2"
+      )}
+      onClick={onClick}
+    >
+      {/* Background Image or Gradient */}
+      {(() => {
+        // Use name as fallback for slug if not available, converted to lowercase
+        const key = (category.slug || category.name || "default").toLowerCase();
+        const gradient = categoryGradients[key] || categoryGradients.default;
+        
+        return category.thumbnail && !imageError ? (
+          <>
+            <Image
+              src={category.thumbnail}
+              alt={category.name}
+              fill
+              className="object-cover transition-transform duration-300 group-hover:scale-110"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              onError={() => setImageError(true)}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+          </>
+        ) : (
+          <div className={cn(
+            "absolute inset-0 bg-gradient-to-br flex items-center justify-center",
+            gradient.from,
+            gradient.to
+          )}>
+             <Music className="w-24 h-24 text-white/20 rotate-12" />
+          </div>
+        );
+      })()}
+
+      {/* Content */}
+      <div className="absolute inset-0 p-4 flex flex-col justify-end">
+        <div className="flex items-center gap-2 mb-1">
+          <Music className="w-4 h-4 text-white/80" />
+          <span className="text-xs font-medium text-white/80">
+            {category.song_count || 0} Lagu
+          </span>
+        </div>
+        <h3 className="text-xl font-bold text-white drop-shadow-lg">
+          {category.name}
+        </h3>
+      </div>
+
+      {/* Play Button Overlay */}
+      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="w-14 h-14 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-xl transform group-hover:scale-110 transition-transform">
+          <Play className="w-6 h-6 text-primary fill-primary ml-1" />
+        </div>
+      </div>
+    </motion.button>
+  );
+}

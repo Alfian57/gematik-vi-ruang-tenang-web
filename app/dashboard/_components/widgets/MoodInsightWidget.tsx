@@ -1,0 +1,155 @@
+"use client";
+
+import Link from "next/link";
+import Image from "next/image";
+import { ROUTES } from "@/lib/routes";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ArrowRight, HeartPulse } from "lucide-react";
+import { MoodType, UserMood } from "@/types";
+import { format } from "date-fns";
+import { id } from "date-fns/locale";
+import { parseApiDate } from "@/utils/date";
+import { MOOD_ASSETS } from "../mood-config";
+
+const MOOD_SCORES: Record<MoodType, number> = {
+  happy: 5,
+  neutral: 3,
+  sad: 2,
+  disappointed: 2,
+  angry: 1,
+  crying: 1,
+};
+
+interface MoodInsightWidgetProps {
+  moods: UserMood[];
+  isLoading?: boolean;
+}
+
+export function MoodInsightWidget({ moods, isLoading }: MoodInsightWidgetProps) {
+  if (isLoading) {
+    return (
+      <Card className="member-widget-card h-full shadow-sm flex flex-col">
+        <CardHeader>
+          <div className="h-6 w-1/3 bg-gray-100 rounded animate-pulse" />
+        </CardHeader>
+        <CardContent className="flex-1">
+          <div className="h-20 bg-gray-100 rounded-xl animate-pulse" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Mood label mapping
+  const moodLabels: Record<string, string> = {
+    happy: "Senang",
+    neutral: "Biasa",
+    angry: "Marah",
+    disappointed: "Kecewa",
+    sad: "Sedih",
+    crying: "Menangis"
+  };
+
+  const sortedMoods = [...moods].sort(
+    (a, b) => parseApiDate(b.created_at).getTime() - parseApiDate(a.created_at).getTime(),
+  );
+
+  const moodCounts = sortedMoods.reduce((acc, mood) => {
+    const label = moodLabels[mood.mood] || mood.mood;
+    acc[label] = (acc[label] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const dominantMood = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0];
+  const lastMood = sortedMoods.length > 0 ? sortedMoods[0] : null;
+
+  const recentWeek = sortedMoods.slice(0, 7);
+  const previousWeek = sortedMoods.slice(7, 14);
+
+  const averageScore = (entries: UserMood[]) => {
+    if (!entries.length) return null;
+    const total = entries.reduce((sum, mood) => sum + (MOOD_SCORES[mood.mood] ?? 0), 0);
+    return total / entries.length;
+  };
+
+  const recentScore = averageScore(recentWeek);
+  const previousScore = averageScore(previousWeek);
+
+  let weeklyNarrative = "Isi mood tracker lebih rutin untuk melihat pola mingguanmu.";
+  if (recentScore !== null && previousScore !== null) {
+    const delta = recentScore - previousScore;
+    if (delta >= 0.5) {
+      weeklyNarrative = "Mood mingguanmu menunjukkan tren membaik. Pertahankan ritme kecil yang sudah berjalan.";
+    } else if (delta <= -0.5) {
+      weeklyNarrative = "Minggu ini terasa lebih berat dari sebelumnya. Fokus ke langkah pemulihan yang paling ringan dulu.";
+    } else {
+      weeklyNarrative = "Mood mingguanmu relatif stabil. Saatnya perkuat satu kebiasaan yang konsisten membantu.";
+    }
+  } else if (recentScore !== null) {
+    weeklyNarrative = "Data minggu ini sudah terbentuk. Lanjutkan catat mood agar rekomendasi makin akurat.";
+  }
+
+  return (
+    <Card className="member-widget-card h-full flex flex-col">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="member-widget-heading text-lg font-bold flex items-center gap-2">
+          <HeartPulse className="member-widget-icon w-5 h-5" />
+          Wawasan Mood
+        </CardTitle>
+        <Link href={ROUTES.JOURNAL}>
+          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-theme-accent-dark">
+            Detail <ArrowRight className="w-3 h-3 ml-1" />
+          </Button>
+        </Link>
+      </CardHeader>
+      <CardContent className="flex-1 flex flex-col justify-center">
+        {lastMood ? (
+          <div className="text-center space-y-3">
+            <div className="member-mood-current relative flex w-full items-center gap-3 overflow-hidden rounded-2xl border bg-white p-4 text-left shadow-sm">
+              <div className="relative h-12 w-12 shrink-0">
+                <Image
+                  src={MOOD_ASSETS[lastMood.mood].active}
+                  alt={MOOD_ASSETS[lastMood.mood].label}
+                  fill
+                  sizes="48px"
+                  className="object-contain"
+                />
+              </div>
+              <div className="relative z-10 min-w-0 pr-14">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-theme-accent-text">Mood terakhir</p>
+                <p className="font-semibold text-gray-900">{moodLabels[lastMood.mood] || lastMood.mood}</p>
+                <p className="text-xs text-gray-500">{format(parseApiDate(lastMood.created_at), "EEEE, d MMM HH:mm", { locale: id })}</p>
+              </div>
+              <div className="member-mood-current-art absolute -bottom-3 right-0 h-24 w-20" aria-hidden="true">
+                <Image src="/images/dashboard/mascot/checkin.webp" alt="" fill sizes="80px" className="object-contain object-bottom" />
+              </div>
+            </div>
+
+            {dominantMood && sortedMoods.length > 5 && (
+              <div className="flex items-center justify-center gap-2 text-xs text-theme-accent-text bg-theme-accent-soft py-1.5 px-3 rounded-full">
+                <HeartPulse className="w-3 h-3" />
+                <span>Kamu sering merasa <strong>{dominantMood[0]}</strong> minggu ini.</span>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-theme-accent/20 bg-theme-accent/5 px-3 py-2 text-left">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-theme-accent-text">Alur Cerita Minggu Ini</p>
+              <p className="text-xs text-theme-accent-dark mt-1 leading-relaxed">{weeklyNarrative}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-6">
+            <div className="relative mx-auto h-32 w-32"><Image src="/images/landing/mascot/mood.webp" alt="" fill sizes="128px" className="member-widget-art object-contain" /></div>
+            <p className="mb-1 mt-2 font-semibold text-gray-900">Perasaanmu punya tempat di sini.</p>
+            <p className="text-sm text-gray-500 mb-4">Belum ada data mood. Yuk mulai check-in pertama.</p>
+            <Link href={ROUTES.MOOD_TRACKER}>
+              <Button size="sm" className="bg-theme-accent hover:bg-theme-accent-hover text-white rounded-full border-none">
+                Catat Mood Sekarang
+              </Button>
+            </Link>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
